@@ -53,17 +53,6 @@ public class ArrayList<E> extends AbstractList<E>
     // 数组中元素个数
    private int size;
     
-   public ArrayList(int initialCapacity) {
-        if (initialCapacity > 0) {
-            this.elementData = new Object[initialCapacity];
-        } else if (initialCapacity == 0) {
-            this.elementData = EMPTY_ELEMENTDATA;
-        } else {
-            throw new IllegalArgumentException("Illegal Capacity: "+
-                                               initialCapacity);
-        }
-    }
-    
     // 指定初始大小
     public ArrayList(int initialCapacity) {
         if (initialCapacity > 0) {
@@ -890,4 +879,166 @@ public E peek() {
 
 
 ### 3.5 删除方法
+
+- #### remove()/removeFirst()/poll() 删除第一个节点
+
+```java
+public E remove() {
+    return removeFirst();
+}
+
+public E removeFirst() {
+    final Node<E> f = first;
+    if (f == null)
+        throw new NoSuchElementException();
+    return unlinkFirst(f);
+}
+
+private E unlinkFirst(Node<E> f) {
+    final E element = f.item;
+    final Node<E> next = f.next;
+    // 第一个节点的赋值为空
+    f.item = null;
+    f.next = null; 
+    // 第二个节点更新为新的首节点
+    first = next;
+    if (next == null)
+        last = null;
+    else
+        next.prev = null;
+    // 元素数量减一
+    size--;
+    modCount++;
+    return element;
+}
+```
+
+- #### remove(int index) 删除指定位置元素
+
+```java
+public E remove(int index) {
+    // 校验索引
+    checkElementIndex(index);
+    // node(index)：取出索引位置的节点
+    return unlink(node(index));
+}
+
+// 更新节点前后节点的next与prev，同时该节点设为空
+E unlink(Node<E> x) {
+    final E element = x.item;
+    final Node<E> next = x.next;
+    final Node<E> prev = x.prev;
+
+    // 无前节点，下个节点更新为第一个节点
+    if (prev == null) {
+        first = next;
+    } else {
+        // 前节点的next指向该节点的下个节点，同时prev设为空
+        prev.next = next;
+        x.prev = null;
+    }
+	
+    // 无后节点，前一个节点更新为最后节点
+    if (next == null) {
+        last = prev;
+    } else {
+        // 后节点的prev指向该节点的前节点，同时next设为空
+        next.prev = prev;
+        x.next = null;
+    }
+
+    x.item = null;
+    size--;
+    modCount++;
+    return element;
+}
+```
+
+- #### remove(Object o) 删除指定元素
+
+```java
+public boolean remove(Object o) {
+    // 如果是空，用==判断
+    if (o == null) {
+        for (Node<E> x = first; x != null; x = x.next) {
+            if (x.item == null) {
+                unlink(x);
+                return true;
+            }
+        }
+    } else {
+        // 非空，用equals方法判断
+        for (Node<E> x = first; x != null; x = x.next) {
+            if (o.equals(x.item)) {
+                unlink(x);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// 指定元素赋值为空，更新前后节点的关系
+E unlink(Node<E> x) {   
+    final E element = x.item;
+    final Node<E> next = x.next;
+    final Node<E> prev = x.prev;
+	
+    // 如果原节点是第一个节点，则下一节点更新为链表的第一个节点
+    if (prev == null) {
+        first = next;
+    } else {
+        //  前一个节点的next更新为原节点的下一个节点
+        prev.next = next;
+        x.prev = null;
+    }
+
+    // 如果原节点是最后一个节点，则上一节点更新为链表的第一个节点
+    if (next == null) {
+        last = prev;
+    } else {
+        next.prev = prev;
+        x.next = null;
+    }
+	
+    // 赋值为空
+    x.item = null;
+    // 元素数量减一
+    size--;
+    modCount++;
+    return element;
+}
+```
+
+- #### remveLast() 删除最后一个元素
+
+```java
+public E removeLast() {
+    // 判断最后一个元素是否为空
+    final Node<E> l = last;
+    if (l == null)
+        throw new NoSuchElementException();
+    return unlinkLast(l);
+}
+
+// 最后一个元素赋值为空，前一个节点更新为最后的节点
+private E unlinkLast(Node<E> l) {
+    final E element = l.item;
+    final Node<E> prev = l.prev;
+    l.item = null;
+    l.prev = null; // help GC
+    // 前一个更点更新为最后节点
+    last = prev;
+    // 前一个节点为空(只有一个元素)，第一个节点赋值为空
+    if (prev == null)
+        first = null;
+    else
+        // 前一个节点的next更新为空
+        prev.next = null;
+    // 元素个数减一
+    size--;
+    modCount++;
+    return element;
+}
+```
 
