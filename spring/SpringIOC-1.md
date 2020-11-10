@@ -50,7 +50,7 @@ public AnnotationConfigApplicationContext() {
 
 > ### new AnnotatedBeanDefinitionReader(this)
 
-AnnotatedBeanDefinitionReader`这个方法主要是注册了一些解析注解的组件。
+AnnotatedBeanDefinitionReader`这个方法主要是注册了一些解析注解的解析器。
 
 ```java
 public AnnotatedBeanDefinitionReader(BeanDefinitionRegistry registry) {
@@ -140,7 +140,7 @@ public static Set<BeanDefinitionHolder> registerAnnotationConfigProcessors(
 }
 ```
 
-`EventListenerMethodProcessor`实现了`SmartInitializingSingleton`，`ApplicationContextAware`和`BeanFactoryPostProcessor`接口。
+事件监听方法处理器：`EventListenerMethodProcessor`实现了`SmartInitializingSingleton`，`ApplicationContextAware`和`BeanFactoryPostProcessor`接口。
 
 `SmartInitializingSingleton`：该接口中只有一个`afterSingletonsInstantiated()`方法，该方法会在bean实例化后触发。
 
@@ -203,7 +203,7 @@ protected void registerDefaultFilters() {
 
 该方法主要是解析bean定义信息并注入其中，就是上一步构造方法中注册，包括自己在`AnnotationConfigApplicationContext`构造方法中传的那个。
 
-![1604671150217](SpringIOC.assets/1604671150217.png)
+![1604671150217](../images/springIOC/1604671150217.png)
 
 该方法最终是调用`AnnotatedBeanDefinitionReader`类的`doRegisterBean`方法
 
@@ -261,8 +261,6 @@ private <T> void doRegisterBean(Class<T> beanClass, @Nullable String name, @Null
 ```
 
 `BeanDefinition`：bean定义，用来描述bean实例的属性值、构造函数等元数据信息。
-
-`BeanDefinitionReaderUtils.registerBeanDefinition()`：将bean定于注册到容器中。
 
 ```java
 public static void registerBeanDefinition(
@@ -368,8 +366,6 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
 ```
 
 除了通过xml或注解的方式向Spring容器中添加bean外，还可以获取beanFactory，通过`registerXX()`方法来手工注入bean。
-
-`resetBeanDefinition()`方法：
 
 ```java
 protected void resetBeanDefinition(String beanName) {
