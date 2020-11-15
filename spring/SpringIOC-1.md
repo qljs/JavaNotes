@@ -20,9 +20,24 @@ https://www.zhihu.com/question/23277575
 
 
 
-## 2. 基于注解的Spring IOC源码分析
+## 2. Spring中几个核心类的
 
-### 2.1 构造方法
+在正式学习Spring源码之前，先简单了解下Spring几个常用的类，以便后续理解，先看下主要的接口及其相关继承图。
+
+![2](../images/beanFactory.png)
+
+顶级接口`BeanFactory`及其子接口的主要功能：
+
+- **BeanFactory**：主要负责生产和管理bean。
+- **ListableBeanFactory**：对`BeanFactory`扩展，用来获取多个bean，`BeanFactory`中都是获取单个bean。
+- **HierarchicalBeanFactory**：该接口主要用来获取父工厂。
+- **AutowireCapableBeanFactory** ：该接口是用来处理自动装配bean的工厂。
+
+从类图中可以看到，`ConfigurableListableBeanFactory`类直接或间接实现了所有`BeanFactory`的子接口的功能，是Spring中十分重要的一个类，在很多地方都有用的。
+
+## 3. 基于注解的Spring IOC源码分析
+
+### 3.1 构造方法
 
 先看下`AnnotationConfigApplicationContext`的构造方法
 
@@ -199,7 +214,7 @@ protected void registerDefaultFilters() {
 
 
 
-### 2.2 register(componentClasses)
+### 3.2 register(componentClasses)
 
 该方法主要是解析bean定义信息并注入其中，就是上一步构造方法中注册，包括自己在`AnnotationConfigApplicationContext`构造方法中传的那个。
 
