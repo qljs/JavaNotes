@@ -1,6 +1,6 @@
 [TOC]
 
-## Spring IOC源码（二）监听器及后置处理器
+## Spring IOC源码（二）—— 监听器及后置处理器
 
 
 
@@ -351,8 +351,11 @@ public static void invokeBeanFactoryPostProcessors(
 
    
 
-4.  处理完实现`PriorityOrdered`和`Ordered`接口的后置处理后，接下来就要处理我们自己实现`BeanDefinitionRegistryPostProcessor`接口的后置处理器了。
-5. 在处理完实现`BeanDefinitionRegistryPostProcessor`接口的后置处理后，用类似的方式，处理实现`BeanFactoryPostProcessors`接口的后置处理器，在这里就详细展开讲了，对于其中的`geBean()`方法，之后的文章会详细讲。
+4. 处理完实现`PriorityOrdered`和`Ordered`接口的后置处理后，接下来就要处理我们自己实现`BeanDefinitionRegistryPostProcessor`接口的后置处理器了。
+
+5. 在处理完实现`BeanDefinitionRegistryPostProcessor`接口的后置处理后，用类似的方式，处理实现`BeanFactoryPostProcessors`接口的后置处理器。
+
+   对于其中的`geBean()`方法，之后的文章会详细讲。
 
 
 
