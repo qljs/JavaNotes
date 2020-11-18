@@ -394,6 +394,5 @@ protected void resetBeanDefinition(String beanName) {
         }
     }
 }
-
 ```
 
