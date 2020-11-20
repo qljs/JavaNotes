@@ -1082,12 +1082,12 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable B
         MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
         // 处理根据name注入的
         if (resolvedAutowireMode == AUTOWIRE_BY_NAME) {
-            // ======== autowireByName() ======
+            // ======== 4.3.1 autowireByName() ======
             autowireByName(beanName, mbd, bw, newPvs);
         }
         // 处理根据type注入的
         if (resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
-            // ======== autowireByName() ======
+            // ======== 4.3.2 autowireByName() ======
             autowireByType(beanName, mbd, bw, newPvs);
         }
         pvs = newPvs;
@@ -1137,6 +1137,7 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable B
 
     if (pvs != null) {
         // 将属性设置到bean包装器中
+        // ======= 4.3.3 applyPropertyValues() =======
         applyPropertyValues(beanName, mbd, bw, pvs);
     }
 }
@@ -1157,7 +1158,7 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable B
 protected void autowireByName(
     String beanName, AbstractBeanDefinition mbd, BeanWrapper bw, MutablePropertyValues pvs) {
 
-    // 获取属性名称
+    // 获取非简单的属性名称
     String[] propertyNames = unsatisfiedNonSimpleProperties(mbd, bw);
     for (String propertyName : propertyNames) {
         // 检查该属性是否在单例bean缓存或beanDefinition缓存中
