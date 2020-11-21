@@ -90,6 +90,7 @@ public void preInstantiateSingletons() throws BeansException {
 
     // 触发bean初始化后回调
     for (String beanName : beanNames) {
+        // 获取bean实例
         Object singletonInstance = getSingleton(beanName);
         if (singletonInstance instanceof SmartInitializingSingleton) {
             SmartInitializingSingleton smartSingleton = (SmartInitializingSingleton) singletonInstance;
@@ -100,6 +101,7 @@ public void preInstantiateSingletons() throws BeansException {
                 }, getAccessControlContext());
             }
             else {
+                // 执行SmartInitializingSingleton的afterSingletonsInstantiated方法
                 smartSingleton.afterSingletonsInstantiated();
             }
         }
@@ -221,7 +223,7 @@ protected RootBeanDefinition getMergedBeanDefinition(
 
 
 
-## 三 getBean()方法
+## 三 doGetBean
 
 ```java
 // AbstractBeanFactory.java
@@ -775,53 +777,52 @@ public Object getSingleton(String beanName, ObjectFactory<?> singletonFactory) {
 ```java
 // AbstractAutowireCapableBeanFactory.java
 protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable Object[] args)
-			throws BeanCreationException {
+    throws BeanCreationException {
 
-		if (logger.isTraceEnabled()) {
-			logger.trace("Creating instance of bean '" + beanName + "'");
-		}
-		RootBeanDefinition mbdToUse = mbd;
+    if (logger.isTraceEnabled()) {
+        logger.trace("Creating instance of bean '" + beanName + "'");
+    }
+    RootBeanDefinition mbdToUse = mbd;
 
-		// 获取bean class
-		Class<?> resolvedClass = resolveBeanClass(mbd, beanName);
-		if (resolvedClass != null && !mbd.hasBeanClass() && mbd.getBeanClassName() != null) {
-			mbdToUse = new RootBeanDefinition(mbd);
-			mbdToUse.setBeanClass(resolvedClass);
-		}
+    // 获取bean class
+    Class<?> resolvedClass = resolveBeanClass(mbd, beanName);
+    if (resolvedClass != null && !mbd.hasBeanClass() && mbd.getBeanClassName() != null) {
+        mbdToUse = new RootBeanDefinition(mbd);
+        mbdToUse.setBeanClass(resolvedClass);
+    }
 
-		// Prepare method overrides.
-		try {
-            // 获取需要重写的父类方法
-			mbdToUse.prepareMethodOverrides();
-		}
-		catch (BeanDefinitionValidationException ex) {
-			throw new BeanDefinitionStoreException(mbdToUse.getResourceDescription(),
-					beanName, "Validation of method overrides failed", ex);
-		}
+    // Prepare method overrides.
+    try {
+        // 获取需要重写的父类方法
+        mbdToUse.prepareMethodOverrides();
+    }
+    catch (BeanDefinitionValidationException ex) {
+        throw new BeanDefinitionStoreException(mbdToUse.getResourceDescription(),
+                                               beanName, "Validation of method overrides failed", ex);
+    }
 
-		try {
-			// 处理BeanPostProcessors后置处理器，生成代理
-			Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
-			if (bean != null) {
-				return bean;
-			}
-		}
-		catch (Throwable ex) {
-			throw new BeanCreationException(mbdToUse.getResourceDescription(), beanName,
-					"BeanPostProcessor before instantiation of bean failed", ex);
-		}
+    try {
+        // 处理BeanPostProcessors后置处理器，生成代理
+        Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
+        if (bean != null) {
+            return bean;
+        }
+    }
+    catch (Throwable ex) {
+        throw new BeanCreationException(mbdToUse.getResourceDescription(), beanName,
+                                        "BeanPostProcessor before instantiation of bean failed", ex);
+    }
 
-		try {
-            // 创建bean
-			Object beanInstance = doCreateBean(beanName, mbdToUse, args);
-			if (logger.isTraceEnabled()) {
-				logger.trace("Finished creating instance of bean '" + beanName + "'");
-			}
-			return beanInstance;
-		}
-		// 省略catch块
-	}
-
+    try {
+        // 创建bean
+        Object beanInstance = doCreateBean(beanName, mbdToUse, args);
+        if (logger.isTraceEnabled()) {
+            logger.trace("Finished creating instance of bean '" + beanName + "'");
+        }
+        return beanInstance;
+    }
+    // 省略catch块
+}
 ```
 
 
@@ -1106,6 +1107,7 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable B
     // 该后置处理器用于对属性的值修改
     // 例如用于处理@AutoWired和@Value的接口：AutowiredAnnotationBeanPostProcessor
     // 该接口继承了InstantiationAwareBeanPostProcessorAdapter，会在这里处理给属性设置值
+    // 如果是@AutoWired注入造成成依赖循环的，在这里会处理
     PropertyDescriptor[] filteredPds = null;
     if (hasInstAwareBpps) {
         if (pvs == null) {
@@ -1577,8 +1579,6 @@ private Object resolveReference(Object argName, RuntimeBeanReference ref) {
 
 
 
-
-
 #### 4.5 initializeBean()
 
 ```java
@@ -1619,7 +1619,3 @@ protected Object initializeBean(final String beanName, final Object bean, @Nulla
 ```
 
 
-
-
-
-## 1.2 初始化之后回调：afterSingletonsInstantiated()

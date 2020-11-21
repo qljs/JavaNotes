@@ -24,7 +24,7 @@ https://www.zhihu.com/question/23277575
 
 在正式学习Spring源码之前，先简单了解下Spring几个常用的类，以便后续理解，先看下主要的接口及其相关继承图。
 
-![2](../images/beanFactory.png)
+![2](../images/springIoc/beanFactory.png)
 
 顶级接口`BeanFactory`及其子接口的主要功能：
 
