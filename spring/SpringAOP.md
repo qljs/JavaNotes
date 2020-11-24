@@ -279,7 +279,7 @@ protected Object initializeBean(final String beanName, final Object bean, @Nulla
 ```java
 // AspectJAwareAdvisorAutoProxyCreator.java
 protected boolean shouldSkip(Class<?> beanClass, String beanName) {
-    // 查找增强器。
+    // 查找候选增强器。
     List<Advisor> candidateAdvisors = findCandidateAdvisors();
     for (Advisor advisor : candidateAdvisors) {
         if (advisor instanceof AspectJPointcutAdvisor &&
@@ -293,7 +293,7 @@ protected boolean shouldSkip(Class<?> beanClass, String beanName) {
 
 
 
-> #### 查找增强器：findCandidateAdvisors()
+> #### 查找候选增强器：findCandidateAdvisors()
 
 ```java
 // AnnotationAwareAspectJAutoProxyCreator.java	
@@ -456,7 +456,7 @@ public List<Advisor> buildAspectJAdvisors() {
 
 先看下` List<Advisor> classAdvisors = this.advisorFactory.getAdvisors(factory)`最终得到的是什么。
 
-![](SpringAOP.assets/1606145734080-1606145767321.png)
+![](../images/springAOP/1606145734080.png)
 
 其实就是`@Aspect`注释的类中的方法，将其解析成了增强器。
 
@@ -745,6 +745,7 @@ protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) 
         return bean;
     }
     
+    // =========== 1.1 getAdvicesAndAdvisorsForBean() ==========
     // 获取增强器
     Object[] specificInterceptors = getAdvicesAndAdvisorsForBean(bean.getClass(), beanName, null);
     // 数组不为空，DO_NOT_PROXY是一个null的Object数组
@@ -766,13 +767,14 @@ protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) 
 
 
 
-> #### getAdvicesAndAdvisorsForBean()
+> ####  获取bean的增强器和通知：getAdvicesAndAdvisorsForBean()
 
 ```java
 // AbstractAdvisorAutoProxyCreator.java
 protected Object[] getAdvicesAndAdvisorsForBean(
     Class<?> beanClass, String beanName, @Nullable TargetSource targetSource) {
-	// 查找增强器，上面已经分析过
+    // =============== 1.1 findEligibleAdvisors =========
+	// 查找合适的增强强器
     List<Advisor> advisors = findEligibleAdvisors(beanClass, beanName);
     // 如果是空的话,返回null
     // DO_NOT_PROXY：Object[] DO_NOT_PROXY = null
@@ -782,6 +784,161 @@ protected Object[] getAdvicesAndAdvisorsForBean(
     return advisors.toArray();
 }
 ```
+
+
+
+#### 1.1 查找合适的增强器：findEligibleAdvisors()
+
+```java
+// AbstractAdvisorAutoProxyCreator.java
+protected List<Advisor> findEligibleAdvisors(Class<?> beanClass, String beanName) {
+    // 获取候选的增强，
+    List<Advisor> candidateAdvisors = findCandidateAdvisors();
+    // ============ 1.3 findAdvisorsThatCanApply() ============
+    // 找到可以用的增强器
+    List<Advisor> eligibleAdvisors = findAdvisorsThatCanApply(candidateAdvisors, beanClass, beanName);
+    extendAdvisors(eligibleAdvisors);
+    if (!eligibleAdvisors.isEmpty()) {
+        eligibleAdvisors = sortAdvisors(eligibleAdvisors);
+    }
+    return eligibleAdvisors;
+}
+```
+
+
+
+#### 1.2  找到可以使用的增强器：findAdvisorsThatCanApply()
+
+spring中可以`@AspcetJ`注入的增强器有很多，现在就要根据beanClass找到自己可用的。
+
+```java
+// AbstractAdvisorAutoProxyCreator.java
+protected List<Advisor> findAdvisorsThatCanApply(
+    List<Advisor> candidateAdvisors, Class<?> beanClass, String beanName) {
+    // 将beanName放入ThreadLocal中
+    ProxyCreationContext.setCurrentProxiedBeanName(beanName);
+    try {
+        // 根据beanName从候选的增强中查找合适的增强器
+        return AopUtils.findAdvisorsThatCanApply(candidateAdvisors, beanClass);
+    }
+    finally {
+        ProxyCreationContext.setCurrentProxiedBeanName(null);
+    }
+}
+```
+
+
+
+> #### findAdvisorsThatCanApply()
+
+```java
+// AopUtils.java
+public static List<Advisor> findAdvisorsThatCanApply(List<Advisor> candidateAdvisors, Class<?> clazz) {
+    if (candidateAdvisors.isEmpty()) {
+        return candidateAdvisors;
+    }
+    // 存放可以匹配的增强器
+    List<Advisor> eligibleAdvisors = new ArrayList<>();
+    for (Advisor candidate : candidateAdvisors) {
+        // 是否是IntroductionAdvisor类型的，并且可以使用
+        if (candidate instanceof IntroductionAdvisor && canApply(candidate, clazz)) {
+            eligibleAdvisors.add(candidate);
+        }
+    }
+    boolean hasIntroductions = !eligibleAdvisors.isEmpty();
+    for (Advisor candidate : candidateAdvisors) {
+        if (candidate instanceof IntroductionAdvisor) {
+            // 已经处理过
+            continue;
+        }
+        // 当到通知链的开头
+        if (canApply(candidate, clazz, hasIntroductions)) {
+            eligibleAdvisors.add(candidate);
+        }
+    }
+    return eligibleAdvisors;
+}
+```
+
+
+
+> #### canApply()
+
+```java
+// AopUtils.java
+public static boolean canApply(Advisor advisor, Class<?> targetClass) {
+    return canApply(advisor, targetClass, false);
+}
+
+// AopUtils.java
+public static boolean canApply(Advisor advisor, Class<?> targetClass, boolean hasIntroductions) {
+    if (advisor instanceof IntroductionAdvisor) {
+        // 类型是否匹配
+        return ((IntroductionAdvisor) advisor).getClassFilter().matches(targetClass);
+    }
+    else if (advisor instanceof PointcutAdvisor) {
+        PointcutAdvisor pca = (PointcutAdvisor) advisor;
+        return canApply(pca.getPointcut(), targetClass, hasIntroductions);
+    }
+    else {
+        // It doesn't have a pointcut so we assume it applies.
+        return true;
+    }
+}
+```
+
+
+
+> #### canApply(pca.getPointcut(), targetClass, hasIntroductions)
+
+检查目标方法是否符合通知条件
+
+```java
+public static boolean canApply(Pointcut pc, Class<?> targetClass, boolean hasIntroductions) {
+    Assert.notNull(pc, "Pointcut must not be null");
+    if (!pc.getClassFilter().matches(targetClass)) {
+        return false;
+    }
+	
+    // 获取方法匹配器
+    MethodMatcher methodMatcher = pc.getMethodMatcher();
+    if (methodMatcher == MethodMatcher.TRUE) {
+        // 如果要匹配任意方法，不需要迭代.
+        return true;
+    }
+
+    IntroductionAwareMethodMatcher introductionAwareMethodMatcher = null;
+    if (methodMatcher instanceof IntroductionAwareMethodMatcher) {
+        introductionAwareMethodMatcher = (IntroductionAwareMethodMatcher) methodMatcher;
+    }
+
+ 
+    Set<Class<?>> classes = new LinkedHashSet<>();
+    // 是不是getProxyClass或newProxyInstance方法动态生成的代理类
+    if (!Proxy.isProxyClass(targetClass)) {
+        classes.add(ClassUtils.getUserClass(targetClass));
+    }
+    // 把接口和实现类都放入set中
+    classes.addAll(ClassUtils.getAllInterfacesForClassAsSet(targetClass));
+
+    for (Class<?> clazz : classes) {
+        // 获取目标类的所有方法
+        Method[] methods = ReflectionUtils.getAllDeclaredMethods(clazz);
+        for (Method method : methods) {
+            // 根据introductionAwareMethodMatcher是否为空来决定采用哪一种匹配器来匹配，找到第一个就直接返回
+            if (introductionAwareMethodMatcher != null ?
+                introductionAwareMethodMatcher.matches(method, targetClass, hasIntroductions) :
+                methodMatcher.matches(method, targetClass)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+```
+
+
 
 
 
