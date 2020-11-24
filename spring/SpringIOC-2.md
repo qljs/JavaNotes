@@ -149,7 +149,7 @@ private void doInvokeListener(ApplicationListener listener, ApplicationEvent eve
 
 `BeanDefinitionRegistryPostProcessor`接口的执行时机是bean定义将要加载到容器中，实例初始化之前。
 
-<img src="../images/springIOC/1604925355775.png" align="left"/>
+![](../images/springIOC/1604925355775.png) 
 
 
 
@@ -335,29 +335,29 @@ public static void invokeBeanFactoryPostProcessors(
 
 1.  在执行完` BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory`后，可以看到`BeanDefinitionRegistry`中只有在构造方法中注入的一些后置处理器以及自己传入配置类。
 
-<img src="../images/springIOC/1605100332202.png" align="left">
+![](../images/springIOC/1605100332202.png) 
 
 
 
 2. 因为没有硬编码注入的后置处理器，而`postProcessBeanDefinitionRegistry()`方法在接下来处理其他处理器时也会调用到，所以在调用到的时候再展开说。
 
    执行` beanFactory.getBeanNamesForType()`方法，获取bean工厂中实现`BeanDefinitionRegistryPostProcessor`接口的处理器，可以看到此时只有一个构造方法注入的`ConfigurationClassPostProcessor`配置类后置处理器。
-
-<img src="../images/springIOC/1605101560572.png" align="left">
+   
+   ![](../images/springIOC/1605101560572.png) 
 
 
 
 3. 执行`invokeBeanDefinitionRegistryPostProcessors()`，解析出我们传入的配置类`ScanConfig`，通过该类上的`@ComponentScan(value = "com.soring.ioc.annotation.postProcessors")`注解，扫描包路径下有`@Component`及其子注解以及`@Improt注解`注入的类，注入到注册其中。
 
-   <img src="../images/springIOC/1605103336647.png" align="left">
+   ![](../images/springIOC/1605103336647.png)
 
    
 
 4. 处理完实现`PriorityOrdered`和`Ordered`接口的后置处理后，接下来就要处理我们自己实现`BeanDefinitionRegistryPostProcessor`接口的后置处理器了。
 
-5. 在处理完实现`BeanDefinitionRegistryPostProcessor`接口的后置处理后，用类似的方式，处理实现`BeanFactoryPostProcessors`接口的后置处理器。
+   
 
-   对于其中的`geBean()`方法，之后的文章会详细讲。
+5. 在处理完实现`BeanDefinitionRegistryPostProcessor`接口的后置处理后，用类似的方式，处理实现`BeanFactoryPostProcessors`接口的后置处理器，对于其中的`geBean()`方法，之后的文章会详细讲。
 
 
 
@@ -523,7 +523,7 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
 
 1. `processConfigBeanDefinitions()`方法在经过对配置处理检查后，`configCandidates`最终只有传入的配置，进入循环，进行真正的解析。
 
-<img src="../images/springIOC/1605410648469.png" align="left">
+   ![](../images/springIOC/1605410648469.png) 
 
 
 
@@ -695,7 +695,7 @@ protected final SourceClass doProcessConfigurationClass(ConfigurationClass confi
 
 `AnnotationConfigUtils.attributesForRepeatable`主要是解析获取了`@ComponentScan`中属性，用来做后面的处理。
 
-<img src="../images/springIOC/1605413326521.png" align="left">
+![](../images/springIOC/1605413326521.png) 
 
 
 
@@ -899,7 +899,7 @@ private Set<BeanDefinition> scanCandidateComponents(String basePackage) {
 
 可以看到经过处理后只拿到了beanDefinition的元数据信息和类型，一些属性还未完成初始化，所以这些beanDefinition的变量名是candidates(候选)。
 
-<img src="../images/springIOC/1605429312613.png" align="left">
+![](../images/springIOC/1605429312613.png) 
 
 
 

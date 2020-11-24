@@ -42,6 +42,8 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 
 
 
+
+
 ## 二 preInstantiateSingletons()
 
 ```java
@@ -1617,5 +1619,6 @@ protected Object initializeBean(final String beanName, final Object bean, @Nulla
     return wrappedBean;
 }
 ```
+
 
 
