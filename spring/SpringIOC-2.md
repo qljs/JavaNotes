@@ -151,6 +151,8 @@ private void doInvokeListener(ApplicationListener listener, ApplicationEvent eve
 
 <img src="../images/springIOC/1604925355775.png" align="left"/>
 
+
+
 ```java
 // AnnotationConfigApplicationContext.java
 protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
