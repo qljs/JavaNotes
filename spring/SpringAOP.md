@@ -48,9 +48,9 @@ protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition 
 
 查看`InstantiationAwareBeanPostProcessor`接口的实现，可以看到其中有一个`AbstractAutoProxyCreator`的实现类，根据名字可以推断出，这是一个代理创建器。
 
+![](../images/springAOP/1605928485465.png) 
 
 
-<img src="../images/springAOP/1605928485465.png" align="left">
 
 可以先看下该类的注释：
 
@@ -66,7 +66,7 @@ protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition 
 
 本文是基于注解的方式分析的，所以先看下`AspectJAwareAdvisorAutoProxyCreator`的类关系图。
 
-![1605927083780](../images/springAOP/1605927083780.png)
+![](../images/springAOP/1605927083780.png)
 
 
 
@@ -251,7 +251,9 @@ public class DemoMain {
 
 而且该方法其他返回都是null，所以在`createBean()`方法中执行后置处理的时候并不会执行`postProcessAfterInitialization()`方法。
 
-<img src="../images/springAOP/1606144805780.png" align="left"/>
+![](../images/springAOP/1606144805780.png) 
+
+
 
 但是在实例化bean的时候，重新调用一次`postProcessAfterInitialization()`方法，此时将代用到`AbstractAutoProxyCreator`中的after方法。
 
@@ -989,7 +991,7 @@ protected Object createProxy(Class<?> beanClass, @Nullable String beanName,
 
 
 
-3.
+> #### getProxy()
 
 ```java
 // ProxyFactory.java
@@ -1039,4 +1041,4 @@ public AopProxy createAopProxy(AdvisedSupport config) throws AopConfigException 
 
 最终创建的代理
 
-![1606151294703](../images/springAOP/1606151294703.png)
+![](../images/springAOP/1606151294703.png)
