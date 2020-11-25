@@ -1,4 +1,4 @@
-[TOC]
+[toc]
 
 ##  Spring IOC源码（一）
 

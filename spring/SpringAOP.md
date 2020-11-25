@@ -1,4 +1,4 @@
-[TOC]
+[TOC] 
 
 
 
@@ -47,6 +47,8 @@ protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition 
 ```
 
 查看`InstantiationAwareBeanPostProcessor`接口的实现，可以看到其中有一个`AbstractAutoProxyCreator`的实现类，根据名字可以推断出，这是一个代理创建器。
+
+
 
 <img src="../images/springAOP/1605928485465.png" align="left">
 
