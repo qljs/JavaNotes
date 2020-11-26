@@ -257,8 +257,9 @@ public boolean matches(Method method, Class<?> targetClass, boolean hasIntroduct
 #### 3. proceed()
 
 ```java
+// ReflectiveMethodInvocation.java
 public Object proceed() throws Throwable {
-    // We start with an index of -1 and increment early.
+    // 退出递归条件
     if (this.currentInterceptorIndex == this.interceptorsAndDynamicMethodMatchers.size() - 1) {
         return invokeJoinpoint();
     }
@@ -281,8 +282,7 @@ public Object proceed() throws Throwable {
         }
     }
     else {
-        // It's an interceptor, so we just invoke it: The pointcut will have
-        // been evaluated statically before this object was constructed.
+        // 执行通知
         return ((MethodInterceptor) interceptorOrInterceptionAdvice).invoke(this);
     }
 }
@@ -309,3 +309,86 @@ public Object invoke(MethodInvocation mi) throws Throwable {
 ```
 
 ![1606320436208](../images/springAOP/1606320436208.png)
+
+
+
+执行before方法
+
+```java
+@Override
+public Object invoke(MethodInvocation mi) throws Throwable {
+    this.advice.before(mi.getMethod(), mi.getArguments(), mi.getThis());
+    return mi.proceed();
+}
+```
+
+
+
+满足递归条件
+
+```java
+// ReflectiveMethodInvocation.java ->return invokeJoinpoint();
+
+protected Object invokeJoinpoint() throws Throwable {
+    return AopUtils.invokeJoinpointUsingReflection(this.target, this.method, this.arguments);
+}
+
+// AopUtils.java
+public static Object invokeJoinpointUsingReflection(@Nullable Object target, Method method, Object[] args)
+    throws Throwable {
+
+    // Use reflection to invoke the method.
+    try {
+        ReflectionUtils.makeAccessible(method);
+        // 执行连接点方法
+        return method.invoke(target, args);
+    }
+    catch (InvocationTargetException ex) {
+        // Invoked method threw a checked exception.
+        // We must rethrow it. The client won't see the interceptor.
+        throw ex.getTargetException();
+    }
+    catch (IllegalArgumentException ex) {
+        throw new AopInvocationException("AOP configuration seems to be invalid: tried calling method [" +
+                                         method + "] on target [" + target + "]", ex);
+    }
+    catch (IllegalAccessException ex) {
+        throw new AopInvocationException("Could not access method [" + method + "]", ex);
+    }
+}
+```
+
+
+
+
+
+执行after方法
+
+```java
+// AspectJAfterAdvice.java
+public Object invoke(MethodInvocation mi) throws Throwable {
+    try {
+        return mi.proceed();
+    }
+    finally {
+        // 执行
+        invokeAdviceMethod(getJoinPointMatch(), null, null);
+    }
+}
+```
+
+
+
+执行执行afterReturning方法
+
+```java
+// AfterReturningAdviceInterceptor.java
+public Object invoke(MethodInvocation mi) throws Throwable {
+    Object retVal = mi.proceed();
+    this.advice.afterReturning(retVal, mi.getMethod(), mi.getArguments(), mi.getThis());
+    return retVal;
+}
+```
+
+
+
