@@ -2,7 +2,7 @@
 
 
 
-## 一 Spring事务三大核心接口
+## 一  Spring事务三大核心接口
 
 ### 1. PlatformTransactionManager：事务管理器
 
@@ -170,7 +170,12 @@ public interface TransactionStatus extends TransactionExecution, SavepointManage
 	 */
 	@Override
 	void flush();
-
 }
 ```
+
+
+
+
+
+### 二  
 
