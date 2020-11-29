@@ -1,4 +1,4 @@
-[TOC] 
+[TOC]
 
 
 
@@ -133,7 +133,7 @@ public Object postProcessBeforeInstantiation(Class<?> beanClass, String beanName
         if (this.advisedBeans.containsKey(cacheKey)) {
             return null;
         }
-        // 如果是基础类或指定类型的bean，表示不需要被代理，shouldSkip()方法被重写了，与IOC中的不一样
+        // 如果是基础类或指定类型的bean，表示不需要被代理，shouldSkip()方法被重写了
         // 基础类：Advice/Pointcut/Advisor/AopInfrastructureBean
         if (isInfrastructureClass(beanClass) || shouldSkip(beanClass, beanName)) {
             // 放入缓存
@@ -270,7 +270,7 @@ protected Object initializeBean(final String beanName, final Object bean, @Nulla
 
 
 
-接下来先看看`postProcessBeforeInstantiation()`方法做了什么。
+接下来先看看`postProcessBeforeInstantiation()`方法中的`shouldSkip()`做了什么。
 
 
 
@@ -283,9 +283,11 @@ protected Object initializeBean(final String beanName, final Object bean, @Nulla
 ```java
 // AspectJAwareAdvisorAutoProxyCreator.java
 protected boolean shouldSkip(Class<?> beanClass, String beanName) {
+    // =========== 1. findCandidateAdvisors() =========
     // 查找候选增强器。
     List<Advisor> candidateAdvisors = findCandidateAdvisors();
     for (Advisor advisor : candidateAdvisors) {
+        // 如果是AspectJPointcutAdvisorr这种类型的的增前器且切面名称和beanName相同，直接返回
         if (advisor instanceof AspectJPointcutAdvisor &&
             ((AspectJPointcutAdvisor) advisor).getAspectName().equals(beanName)) {
             return true;
@@ -304,7 +306,7 @@ protected boolean shouldSkip(Class<?> beanClass, String beanName) {
 @Override
 protected List<Advisor> findCandidateAdvisors() {
     // ================ 1.1 findCandidateAdvisors() ================
-    // 调用父类的获取增强器方法
+    // 调用父类的获取增强器方法，主要是处理实现Advisor接口的增强器，事务的增强器实现了这个接口
     List<Advisor> advisors = super.findCandidateAdvisors();
     if (this.aspectJAdvisorsBuilder != null) {
         // ================ 1.2 buildAspectJAdvisors() ==================
@@ -844,18 +846,19 @@ public static List<Advisor> findAdvisorsThatCanApply(List<Advisor> candidateAdvi
     // 存放可以匹配的增强器
     List<Advisor> eligibleAdvisors = new ArrayList<>();
     for (Advisor candidate : candidateAdvisors) {
-        // 是否是IntroductionAdvisor类型的，并且可以使用
+        // 是否是IntroductionAdvisor类型的，并且当前类可以使用
         if (candidate instanceof IntroductionAdvisor && canApply(candidate, clazz)) {
             eligibleAdvisors.add(candidate);
         }
     }
+    // 	处理非IntroductionAdvisor类型的Advisor
     boolean hasIntroductions = !eligibleAdvisors.isEmpty();
     for (Advisor candidate : candidateAdvisors) {
         if (candidate instanceof IntroductionAdvisor) {
             // 已经处理过
             continue;
         }
-        // 当到通知链的开头
+        // 判断是否可以应用到当前bean类型
         if (canApply(candidate, clazz, hasIntroductions)) {
             eligibleAdvisors.add(candidate);
         }
@@ -911,6 +914,11 @@ public static boolean canApply(Pointcut pc, Class<?> targetClass, boolean hasInt
         return true;
     }
 
+    // 这里将MethodMatcher强转为IntroductionAwareMethodMatcher类型的原因在于，
+    // 如果目标类不包含Introduction类型的Advisor，那么使用
+    // IntroductionAwareMethodMatcher.matches()方法进行匹配判断时可以提升匹配的效率，
+    // 其会判断目标bean中没有使用Introduction织入新的方法，则可以使用该方法进行静态匹配，从而提升效率
+    // 因为Introduction类型的Advisor可以往目标类中织入新的方法，新的方法也可能是被AOP环绕的方法
     IntroductionAwareMethodMatcher introductionAwareMethodMatcher = null;
     if (methodMatcher instanceof IntroductionAwareMethodMatcher) {
         introductionAwareMethodMatcher = (IntroductionAwareMethodMatcher) methodMatcher;
@@ -941,6 +949,40 @@ public static boolean canApply(Pointcut pc, Class<?> targetClass, boolean hasInt
     return false;
 }
 ```
+
+
+
+#### 1.3 进行方法匹配：introductionAwareMethodMatcher.matches()
+
+```java
+public boolean matches(Method method, Class<?> targetClass, boolean hasIntroductions) {
+    // 获取切点表达式（@Pointcut中配置的）进行解析，并将结果缓存，
+    obtainPointcutExpression();
+    // 获取将切点表达式与方法的匹配结果
+    ShadowMatch shadowMatch = getTargetShadowMatch(method, targetClass);
+
+   
+    if (shadowMatch.alwaysMatches()) {
+         // 匹配成功
+        return true;
+    }
+    else if (shadowMatch.neverMatches()) {
+        // 匹配失败
+        return false;
+    }
+    else {
+        // 无法确定匹配结果时，如果有Introduction类型的Advisor，来进行进一步匹配
+        if (hasIntroductions) {
+            return true;
+        }
+        // 
+        RuntimeTestWalker walker = getRuntimeTestWalker(shadowMatch);
+        return (!walker.testsSubtypeSensitiveVars() || walker.testTargetInstanceOfResidue(targetClass));
+    }
+}
+```
+
+
 
 
 
