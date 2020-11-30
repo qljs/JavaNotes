@@ -1,4 +1,4 @@
-[TOC]
+[toc]
 
 ## Spring IOC学习（三）getBean()
 
