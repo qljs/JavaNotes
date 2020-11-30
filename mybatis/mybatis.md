@@ -185,11 +185,13 @@ public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds r
 
 
 ```java
+// 
 public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
     ErrorContext.instance().resource(ms.getResource()).activity("executing a query").object(ms.getId());
     if (closed) {
         throw new ExecutorException("Executor was closed.");
     }
+    // 
     if (queryStack == 0 && ms.isFlushCacheRequired()) {
         clearLocalCache();
     }
