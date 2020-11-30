@@ -71,6 +71,8 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 
 ## 二 preInstantiateSingletons()
 
+准备初始化所有非懒加载的bean
+
 ```java
 // DefaultListableBeanFactory.java
 public void preInstantiateSingletons() throws BeansException {
@@ -1644,6 +1646,3 @@ protected Object initializeBean(final String beanName, final Object bean, @Nulla
     return wrappedBean;
 }
 ```
-
-
-
