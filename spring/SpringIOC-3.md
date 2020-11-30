@@ -1,6 +1,31 @@
-[TOC]
+# Spring IOC学习（三）getBean()
 
-## Spring IOC学习（三）getBean()
+* [一\. 初始化非懒加载的单例bean](#%E4%B8%80-%E5%88%9D%E5%A7%8B%E5%8C%96%E9%9D%9E%E6%87%92%E5%8A%A0%E8%BD%BD%E7%9A%84%E5%8D%95%E4%BE%8Bbean)
+* [二 preInstantiateSingletons()](#%E4%BA%8C-preinstantiatesingletons)
+    * [1\. getMergedLocalBeanDefinition()](#1-getmergedlocalbeandefinition)
+* [三 doGetBean](#%E4%B8%89-dogetbean)
+    * [1\. getSingleton(String beanName, boolean allowEarlyReference)](#1-getsingletonstring-beanname-boolean-allowearlyreference)
+    * [2\. getObjectForBeanInstance()](#2-getobjectforbeaninstance)
+    * [2\.1 getObjectFromFactoryBean()](#21-getobjectfromfactorybean)
+    * [2\.2  doGetObjectFromFactoryBean()](#22--dogetobjectfromfactorybean)
+* [四 创建bean](#%E5%9B%9B-%E5%88%9B%E5%BB%BAbean)
+  * [1\. 检查处理 @DependsOn 循环依赖](#1-%E6%A3%80%E6%9F%A5%E5%A4%84%E7%90%86-dependson-%E5%BE%AA%E7%8E%AF%E4%BE%9D%E8%B5%96)
+  * [2\. getSingleton()](#2-getsingleton)
+  * [3\. createBean()](#3-createbean)
+  * [4\. doCreateBean()](#4-docreatebean)
+    * [4\.1 createBeanInstance()](#41-createbeaninstance)
+    * [4\.2 addSingletonFactory()](#42-addsingletonfactory)
+    * [4\.3 populateBean()](#43-populatebean)
+      * [4\.3\.1 autowireByName()](#431-autowirebyname)
+      * [4\.3\.2 autowireByType()](#432-autowirebytype)
+      * [4\.3\.3  applyPropertyValues()](#433--applypropertyvalues)
+      * [4\.3\.4 resolveValueIfNecessary()](#434-resolvevalueifnecessary)
+      * [4\.3\.5 resolveReference()](#435-resolvereference)
+    * [4\.5 initializeBean()](#45-initializebean)
+
+
+
+
 
 在`refresh()`方法中，`finishBeanFactoryInitialization()`方法会对所有单例非懒加载的bean进行初始化。
 
