@@ -1,4 +1,4 @@
-[toc]
+[TOC]
 
 ## Spring IOC学习（三）getBean()
 
@@ -570,7 +570,7 @@ protected Object getObjectFromFactoryBean(FactoryBean<?> factory, String beanNam
 ```
 
 1. 如果是单例且在单例对象缓存中，从FactoryBean的单例缓存中获取，没有取到调用真正的获取实例方法`doGetObjectFromFactoryBean()`；
-2.  如果需要执行后置处理，则执行`postProcessObjectFromFactoryBean`进行后置处理，并尝试放入缓存；
+2. 如果需要执行后置处理，则执行`postProcessObjectFromFactoryBean`进行后置处理，并尝试放入缓存；
 3. 若非单例或在单例缓存池中不存在，同样执行`doGetObjectFromFactoryBean`方法来获取实例，之后执行后置处理器。
 
 
