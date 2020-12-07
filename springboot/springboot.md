@@ -299,28 +299,42 @@ public ConfigurableApplicationContext run(String... args) {
     Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
     // 设置java.awt.headless属性
     configureHeadlessProperty();
-    // 获取监听
+    // 扫描META-INF/spring.factories获取监听
     SpringApplicationRunListeners listeners = getRunListeners(args);
-    // 注册到多播器上并执行监听
+    // 通过多播器发布容器启动事件
     listeners.starting();
     try {
         // 处理参数
         ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
-        // 根据获取到的webApplicationType，构造环境
+        // 准备容器环境
+        // 1. 获取或创建环境,2.设置命令行参数 3.发布环境准备事件
         ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
         configureIgnoreBeanInfo(environment);
+        // 打印图标
         Banner printedBanner = printBanner(environment);
+        // 根据webApplicationType反射创建容器
         context = createApplicationContext();
+        // 获取META-INF/spring.factories中异常报告组件
         exceptionReporters = getSpringFactoriesInstances(SpringBootExceptionReporter.class,
                                                          new Class[] { ConfigurableApplicationContext.class }, context);
+        //准备环境
+		// 1：把环境设置到容器中
+		// 2: 循环调用AppplicationInitnazlier 进行容器初始化工作
+		// 3:发布容器上下文准备完成事件
+		// 4:注册关于springboot特性的相关单例Bean；springApplicationArguments/springBootBanner
+        // 5.加载资源；就是把启动类加载进去
+		// 5:发布容器上下文加载完毕事件
         prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+        // 最终会调用到IOC中的refresh()方法
         refreshContext(context);
         afterRefresh(context, applicationArguments);
         stopWatch.stop();
         if (this.logStartupInfo) {
             new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), stopWatch);
         }
+        // 发布容器启动事件
         listeners.started(context);
+        // 运行ApplicationRunner和CommandLineRunner；可以在容器启动后处理一些内容
         callRunners(context, applicationArguments);
     }
     catch (Throwable ex) {
@@ -329,6 +343,7 @@ public ConfigurableApplicationContext run(String... args) {
     }
 
     try {
+        // 发布容器启动事件
         listeners.running(context);
     }
     catch (Throwable ex) {
@@ -348,16 +363,211 @@ private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners
                                                    ApplicationArguments applicationArguments) {
     // 根据获取到的webApplicationType，创建ConfigurableEnvironment
     ConfigurableEnvironment environment = getOrCreateEnvironment();
+    // 处理defaultProperties、commandLine及active-prifiles属性
+    // 第一次进来的时候全部是空的，什么也没做
     configureEnvironment(environment, applicationArguments.getSourceArgs());
+    // 新建configurationProperties类型PropertySource，放入环境中用于之后的处理
     ConfigurationPropertySources.attach(environment);
+    // 发布环境准备事件，获取SpringApplicationRunListener,用于处理实现EnvironmentPostProcessor接口的后置处理器
+    // 配置中spring.profiles.active指定激活的环境，将在这里通过ConfigFileApplicationListener后置处理器被解析加载
     listeners.environmentPrepared(environment);
-    bindToSpringApplication(environment);
+    // 将环境与spring上下文绑定
+    bindToSpringApplication(environment); 
     if (!this.isCustomEnvironment) {
-        environment = new EnvironmentConverter(getClassLoader()).convertEnvironmentIfNecessary(environment,
-                                                                                               deduceEnvironmentClass());
+        // 不是自定义环境，进行转换
+        environment = new EnvironmentConverter(getClassLoader()).convertEnvironmentIfNecessary(environment, deduceEnvironmentClass());
     }
+    // 移除环境中的configurationProperties类型的PropertySource
     ConfigurationPropertySources.attach(environment);
     return environment;
+}
+```
+
+
+
+> #### **environment**
+
+![1607160426635](../images/springboot/1607160426635.png)
+
+
+
+
+
+> ### 配置环境：configureEnvironment()
+
+```java
+protected void configureEnvironment(ConfigurableEnvironment environment, String[] args) {
+    if (this.addConversionService) {
+        // 获取ConversionService实例，用于处理格式化
+        ConversionService conversionService = ApplicationConversionService.getSharedInstance();
+        environment.setConversionService((ConfigurableConversionService) conversionService);
+    }
+    // 添加默认的配置以及args传接进来的配置
+    configurePropertySources(environment, args);
+    // 配置Profil，即spring.profiles.active，指定环境
+    // 但是此时是空的，真正加载进来是在之后的发布环境准备事件中
+    configureProfiles(environment, args);
+}
+```
+
+**conversionService**
+
+![1607139172101](../images/springboot/1607139172101.png)
+
+
+
+
+
+### 2.2 refreshContext()
+
+`refreshContext()`最终回到用到`org.springframework.context.support.AbstractApplicationContext#refresh`方法，而`refresh()`正式IOC中的核心方法。
+
+```java
+public void refresh() throws BeansException, IllegalStateException {
+    synchronized (this.startupShutdownMonitor) {
+        // 准备容器刷新
+    	// 1. 清空metadataReaderCache，标记applicationContext状态为激活
+   		// 2. 判断是否需要用ServletContextPropertySource替换当前环境中的同步配置源
+        // 3. 检验属性，确保必要的属性都可以被解析
+        // 4. 设置早期监听
+        prepareRefresh();
+
+        // 设置beanFactory的序列化ID，获取BeanFactory
+        ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+
+        // 准备BeanFactory，给beanFactory注册一些属性，例如：BeanPostProcessor、BeanClassLoader等等
+        prepareBeanFactory(beanFactory);
+
+        try {
+            // 处理bean
+            postProcessBeanFactory(beanFactory);
+
+            // 处理BeanFactoryPostProcessor和BeanDefinitionRegistryPostProcessor后置处理器在IOC中分析过	
+            invokeBeanFactoryPostProcessors(beanFactory);
+
+            // 创建并注册BeanPostProcessor
+            registerBeanPostProcessors(beanFactory);
+
+            // 初始化MessageSource
+            initMessageSource();
+
+            // 初始化多播器
+            initApplicationEventMulticaster();
+
+            // IOC内嵌tomcat在这里初始化启动
+            onRefresh();
+
+            // 注册监听器，执行早期监听
+            registerListeners();
+
+            // 实例化bean
+            finishBeanFactoryInitialization(beanFactory);
+
+            // Last step: publish corresponding event.
+            finishRefresh();
+        }
+
+        catch (BeansException ex) {
+            if (logger.isWarnEnabled()) {
+                logger.warn("Exception encountered during context initialization - " +
+                            "cancelling refresh attempt: " + ex);
+            }
+
+            // 销毁所有的单例bean
+            destroyBeans();
+
+            // 取消刷新
+            cancelRefresh(ex);
+
+            // Propagate exception to caller.
+            throw ex;
+        }
+
+        finally {
+            // 重置缓存
+            resetCommonCaches();
+        }
+    }
+}
+```
+
+
+
+### 2.3  创建内嵌tomcat：onRefresh()
+
+如果是springboot打成jar包，是IOC容器带动内嵌tomcat启动，而war包则是tomcat带动IOC启动，需要启动类实现SpringBootServletInitializer接口。
+
+现在这种方式是jar包的形式，即通过IOC容器带动内嵌tomcat启动。
+
+```java
+// ServletWebServerApplicationContext.java
+protected void onRefresh() {
+    super.onRefresh();
+    try {
+        // 创建WebServer，即tomcat
+        createWebServer();
+    }
+    catch (Throwable ex) {
+        throw new ApplicationContextException("Unable to start web server", ex);
+    }
+}
+
+// ServletWebServerApplicationContext.java
+private void createWebServer() {
+    // 获取webServer，现在还为空
+    WebServer webServer = this.webServer;
+    // 获取Servlet上下文，现在还为空
+    ServletContext servletContext = getServletContext();
+    if (webServer == null && servletContext == null) {
+        // 获取ServletWebServer的工厂，名字是tomcatServletWebServerFactory
+        ServletWebServerFactory factory = getWebServerFactory();
+        // 获取
+        this.webServer = factory.getWebServer(getSelfInitializer());
+        getBeanFactory().registerSingleton("webServerGracefulShutdown",
+                                           new WebServerGracefulShutdownLifecycle(this.webServer));
+        getBeanFactory().registerSingleton("webServerStartStop",
+                                           new WebServerStartStopLifecycle(this, this.webServer));
+    }
+    else if (servletContext != null) {
+        try {
+            getSelfInitializer().onStartup(servletContext);
+        }
+        catch (ServletException ex) {
+            throw new ApplicationContextException("Cannot initialize servlet context", ex);
+        }
+    }
+    initPropertySources();
+}
+```
+
+
+
+> #### 创建tomcat：getWebServer()
+
+```java
+public WebServer getWebServer(ServletContextInitializer... initializers) {
+    if (this.disableMBeanRegistry) {
+        // 创建注册器
+        Registry.disableRegistry();
+    }
+    // 创建tomcat对象
+    Tomcat tomcat = new Tomcat();
+    // 设置tomcat的一些属性
+    File baseDir = (this.baseDirectory != null) ? this.baseDirectory : createTempDir("tomcat");
+    tomcat.setBaseDir(baseDir.getAbsolutePath());
+    Connector connector = new Connector(this.protocol);
+    connector.setThrowOnFailure(true);
+    tomcat.getService().addConnector(connector);
+    customizeConnector(connector);
+    tomcat.setConnector(connector);
+    tomcat.getHost().setAutoDeploy(false);
+    configureEngine(tomcat.getEngine());
+    for (Connector additionalConnector : this.additionalTomcatConnectors) {
+        tomcat.getService().addConnector(additionalConnector);
+    }
+    prepareContext(tomcat.getHost(), initializers);
+    // getTomcatWebServer：启动tomcat
+    return getTomcatWebServer(tomcat);
 }
 ```
 
