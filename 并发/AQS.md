@@ -63,7 +63,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
         // 在同步队列中等待的线程等待超时或者被中断，需要从同步队列中取消等待
         static final int CANCELLED =  1;
-        // 后继节点需要被唤醒
+        // 节点需要被唤醒
         static final int SIGNAL    = -1;
         // 节点在等待队列中，节点的线程等待在Condition上，当其他线程对Condition调用了signal()方法后，
     	// 该节点会从等待队列中转移到同步队列中，加入到同步状态的获取中
@@ -82,7 +82,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         // 节点中的线程
         volatile Thread thread;
 
-        // 链接到等待条件的下一个节点，或者链接到特殊值SHARED。
+        // 等待队列中的后继节点，如果当前节点是共享的，那么这个字段是一个SHARED常量，
+        // 也就是说节点类型(独占和共享)和等待队列中的后继节点共用同一个字段。
         Node nextWaiter;
 
        // .......
@@ -189,7 +190,7 @@ public final boolean hasQueuedPredecessors() {
     Node t = tail; // Read fields in reverse initialization order
     Node h = head;
     Node s;
-    // h != t：队列中至少存在一个节点，队列中有节点时，头节点是一个空的节点，只有next有值
+    // h != t：队列中至少存在一个节点，node是final类型，可以直接通过==比较
     return h != t &&
         // 头节点next为空或者队列中第一个阻塞线程不等于当前线程
         ((s = h.next) == null || s.thread != Thread.currentThread());
@@ -198,15 +199,151 @@ public final boolean hasQueuedPredecessors() {
 
 
 
-#### 3.2.2 线程挂起，放入队列：acquireQueued(addWaiter(Node.EXCLUSIVE), arg)
+#### 3.1.2 放入队列：addWaiter(Node.EXCLUSIVE)
+
+**此时传入的独占类型的**
 
 > #### addWaiter()
 
 ```java
-
+private Node addWaiter(Node mode) {
+    // 新建一个节点
+    Node node = new Node(Thread.currentThread(), mode);
+    // 获取尾结点
+    Node pred = tail;
+    if (pred != null) {
+        // 尾结点不为空，将新建节点的前节点更新为原尾结点
+        // 先更新新节点的前节点，即使下面CAS操作失败，也不会影响队列
+        node.prev = pred;
+        // 通过CAS操作尝试将新节点更新为尾结点
+        if (compareAndSetTail(pred, node)) {
+           	// 更新成功后，将原尾结点的next节点更新为新尾结点
+            pred.next = node;
+            return node;
+        }
+    }
+    // 尾结点为null，代表整个队列还初始化，那个接下来就要初始化队列，更将节点插入队列
+    enq(node);
+    return node;
+}
 ```
 
 
+
+> #### 将节点插入队列：enq()
+
+```java
+private Node enq(final Node node) {
+    // 死循环，要么成功，要么一直尝试
+    for (;;) {
+        // 获取尾结点
+        Node t = tail;
+        // 再次判断尾结点是否为空
+        if (t == null) {
+            // 尾结点为空，代表没有被他线程抢先初始化队列
+            // 通过CAS操作设置头结点，注意头结点是一个空的node
+            if (compareAndSetHead(new Node()))
+                // 头尾节点指向同一个node
+                tail = head;
+            	// 未终止循环，下次循环会走else节点
+        } else {
+            // 尾结点不为空
+            node.prev = t;
+            // 通过CAS操作将新节点更新为尾结点
+            if (compareAndSetTail(t, node)) {
+                // 更新成功，将原尾结点的next节点更新为新尾结点
+                t.next = node;
+                // 返回最近进入队列的节点
+                return t;
+            }
+        }
+    }
+}
+```
+
+
+
+#### 3.1.3 阻塞队列中的线程节点：acquireQueued()
+
+```java
+final boolean acquireQueued(final Node node, int arg) {
+	// 
+    boolean failed = true;
+    try {
+        boolean interrupted = false;
+        for (;;) {
+            // 获取新建节点的前节点
+            final Node p = node.predecessor();
+            // 新建节点的前节点是头结点，尝试获取锁
+            if (p == head && tryAcquire(arg)) {
+                // 将新建节点更新为头结点，就是把thread和prev置空
+                setHead(node);
+                p.next = null; // help GC
+                failed = false;
+                return interrupted;
+            }
+            // 新建节点的前节点不是头结点，查看前节点是否要被唤醒、移除、或者设置为等待被唤醒
+            if (shouldParkAfterFailedAcquire(p, node) &&
+                // 阻塞线程
+                parkAndCheckInterrupt())
+                interrupted = true;
+            	// 这里没有终止循环，还在不断循环尝获取锁，直到新建节点前某一节点获取到锁
+        }
+    } finally {
+        if (failed)
+            cancelAcquire(node);
+    }
+}
+```
+
+
+
+> 检查并更新节点状态：shouldParkAfterFailedAcquire()
+
+```java
+private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
+    int ws = pred.waitStatus;
+    if (ws == Node.SIGNAL)
+        // 前节点需要被唤醒
+        return true;
+    if (ws > 0) {
+        // 前节点从队列中移除，直至找到一个可以被唤醒的节点
+        do {
+            node.prev = pred = pred.prev;
+        } while (pred.waitStatus > 0);
+        pred.next = node;
+    } else {
+        // 将前节点状态设置为等待被唤醒
+        compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
+    }
+    return false;
+}
+```
+
+
+
+
+
+> #### 阻塞线程：parkAndCheckInterrupt()
+
+```java
+/**
+* 阻塞当前节点，返回当前Thread的中断状态
+* LockSupport.park 底层实现逻辑调用系统内核功能 pthread_mutex_lock 阻塞线程
+*/
+private final boolean parkAndCheckInterrupt() {
+    // 阻塞
+    LockSupport.park(this);
+    // 线程是否中断
+    return Thread.interrupted();
+}
+```
+
+
+
+### 3.1.4 加锁流程图
+
+![](../images/bf/fairsyn.jpg)
 
 
 
