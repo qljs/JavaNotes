@@ -107,7 +107,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
 ## 3. ReentrantLock公平锁源码
 
-`ReentrantLock`默认使用的非公平锁，如果要是用公平锁，可以在创建对象时传入参数`true`。
+`ReentrantLock`默认使用的非公平锁，如果要是用公平锁，可以在创建对象时传入参数`true`，且`ReentrantLock`时独占模式。
 
 ```java
 public ReentrantLock() {
@@ -207,7 +207,7 @@ public final boolean hasQueuedPredecessors() {
 
 ```java
 private Node addWaiter(Node mode) {
-    // 新建一个节点
+    // 新建一个节点，此时节点的状态waitStatus是默认的0
     Node node = new Node(Thread.currentThread(), mode);
     // 获取尾结点
     Node pred = tail;
@@ -267,7 +267,6 @@ private Node enq(final Node node) {
 
 ```java
 final boolean acquireQueued(final Node node, int arg) {
-	// 
     boolean failed = true;
     try {
         boolean interrupted = false;
@@ -287,9 +286,10 @@ final boolean acquireQueued(final Node node, int arg) {
                 // 阻塞线程
                 parkAndCheckInterrupt())
                 interrupted = true;
-            	// 这里没有终止循环，还在不断循环尝获取锁，直到新建节点前某一节点获取到锁
+            	// 这里没有终止循环，在线程被唤醒后会不断循环尝试获取锁
         }
     } finally {
+        // 在tryAcquire()抛出异常时，failed会为true
         if (failed)
             cancelAcquire(node);
     }
@@ -304,7 +304,7 @@ final boolean acquireQueued(final Node node, int arg) {
 private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
     int ws = pred.waitStatus;
     if (ws == Node.SIGNAL)
-        // 前节点需要被唤醒
+        // 前节点状态为-1，需要被唤醒
         return true;
     if (ws > 0) {
         // 前节点从队列中移除，直至找到一个可以被唤醒的节点
@@ -313,7 +313,7 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
         } while (pred.waitStatus > 0);
         pred.next = node;
     } else {
-        // 将前节点状态设置为等待被唤醒
+        // 将前节点状态设置为等待被唤醒，进入这个分支的只剩下0，-2，-3了，状态0是节点初始化时候的状态
         compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
     }
     return false;
@@ -344,6 +344,301 @@ private final boolean parkAndCheckInterrupt() {
 ### 3.1.4 加锁流程图
 
 ![](../images/bf/fairsyn.jpg)
+
+
+
+
+
+### 3.2 解锁
+
+```java
+public void unlock() {
+    // 释放锁
+    sync.release(1);
+} 
+
+public final boolean release(int arg) {
+    // 是否可以释放锁
+    if (tryRelease(arg)) {
+        Node h = head;
+        // 在上面节点拆入队列时，做过一次前驱节点状态更新为-1的操作，头结点的状态就是在那里更新的
+        if (h != null && h.waitStatus != 0)
+            // 唤醒线程
+            unparkSuccessor(h);
+        return true;
+    }
+    return false;
+}
+```
+
+
+
+#### 3.2.1 尝试释放锁：tryRelease()
+
+```java
+protected final boolean tryRelease(int releases) {
+    int c = getState() - releases;
+    // 当前线程不是持有锁的线程，抛错
+    if (Thread.currentThread() != getExclusiveOwnerThread())
+        throw new IllegalMonitorStateException();
+    // 是否可以释放锁
+    boolean free = false;
+    if (c == 0) {
+        // C==0,线程重入，等于0时可以释放
+        free = true;
+        // 独占线程清空
+        setExclusiveOwnerThread(null);
+    }
+    // 不等于0，更新线程重入次数
+    setState(c);
+    return free;
+}
+```
+
+
+
+> #### 唤醒线程：unparkSuccessor()
+
+```java
+private void unparkSuccessor(Node node) {
+    // node是头节点
+    int ws = node.waitStatus;
+    if (ws < 0)
+        // 将头节点的状态更新为0
+        compareAndSetWaitStatus(node, ws, 0);
+
+    Node s = node.next;
+    // 头节点的后继节点为null，或者需要被取消
+    if (s == null || s.waitStatus > 0) {
+        s = null;
+        // 头节点为null时，尾节点也一定为空，不会进入该循环
+        // 从后向前循环找出第一个状态waitStatus小于等于0的节点
+        for (Node t = tail; t != null && t != node; t = t.prev)
+            if (t.waitStatus <= 0)
+                s = t;
+    }
+    if (s != null)
+        // 唤醒线程
+        LockSupport.unpark(s.thread);
+}
+```
+
+
+
+## 4.  Semaphore源码分析
+
+`Semaphore`：信号量，用于控制访问资源的线程数量，可以用来做单机限流等。
+
+```java
+// permits：同时可获去资源的线程数，默认采用非公平锁
+public Semaphore(int permits) {
+    sync = new NonfairSync(permits);
+}
+
+// fair：true:公平锁；false：非公平锁
+public Semaphore(int permits, boolean fair) {
+    sync = fair ? new FairSync(permits) : new NonfairSync(permits);
+}
+
+```
+
+使用例子：
+
+```java
+public class SemaphoreDemo {
+
+    public static void main(String[] args) {
+        Semaphore semaphore = new Semaphore(2);
+
+        for (int i = 0; i < 5; i++) {
+            new Thread(()->{
+                try {
+                    semaphore.acquire();
+                    System.out.println(Thread.currentThread().getName() + "拿到资源！");
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }finally {
+                    semaphore.release();
+                }
+            },"线程" + i).start();
+        }
+    }
+}
+```
+
+
+
+### 4.1 阻塞并获取资源：acquire()
+
+```java
+public void acquire() throws InterruptedException {
+    sync.acquireSharedInterruptibly(1);
+}
+
+public final void acquireSharedInterruptibly(int arg)
+    throws InterruptedException {
+    // 判断线程是否被中断
+    if (Thread.interrupted())
+        throw new InterruptedException();
+    // 获取共享资源
+    if (tryAcquireShared(arg) < 0)
+        // 允许获取数量小于零，将新的线程放入队列阻塞
+        doAcquireSharedInterruptibly(arg);
+}
+```
+
+
+
+> #### 尝试获取共享资源：tryAcquireShared()
+
+```java
+protected int tryAcquireShared(int acquires) {
+    return nonfairTryAcquireShared(acquires);
+}
+
+final int nonfairTryAcquireShared(int acquires) {
+    // 系循环，不断尝试，直到达到允许线程数
+    for (;;) {
+        // state：共享资源允许线程访问的数量
+        int available = getState();
+        int remaining = available - acquires;
+        // 剩余数量小于0
+        if (remaining < 0 ||
+            // CAS更新数量
+            compareAndSetState(available, remaining))
+            return remaining;
+    }
+}
+```
+
+
+
+### 4.2 未拿到资源的线程阻塞：doAcquireSharedInterruptibly()
+
+```java
+private void doAcquireSharedInterruptibly(int arg)
+    throws InterruptedException {
+    // 插入队列，与ReectrantLock逻辑一样，但是模式变为了共享
+    final Node node = addWaiter(Node.SHARED);
+    boolean failed = true;
+    try {
+        for (;;) {
+            // 获取前驱节点
+            final Node p = node.predecessor();
+            if (p == head) {
+                // 前驱节点时头节点，即自己时第一个阻塞的节点，那么就去尝试获取资源
+                int r = tryAcquireShared(arg);
+                if (r >= 0) {
+                    // 拿到资源
+                    setHeadAndPropagate(node, r);
+                    p.next = null; // help GC
+                    failed = false;
+                    return;
+                }
+            }
+            // 与ReectrantLock逻辑一样
+            if (shouldParkAfterFailedAcquire(p, node) &&
+                parkAndCheckInterrupt())
+                // 前驱节点状态为-1，代表已经有其他节点更新过了前驱节点的状态，同时当前线程已经中断
+   				// 那么队列中该节点的位置被别人抢了
+                throw new InterruptedException();
+        }
+    } finally {
+        if (failed)
+            cancelAcquire(node);
+    }
+}
+```
+
+
+
+## 5. CountDownLatch()
+
+​		CountDownLatch允许 count 个线程阻塞在一个地方，直至所有线程的任务都执行完毕。
+
+​		CountDownLatch是通过一个计数器来实现的，计数器的初始值为线程的数量。每当 一个线程完成了自己的任务后，计数器的值就会减1。当计数器值到达0时，它表示所有的 线程已经完成了任务，然后在闭锁上等待的线程就可以恢复执行任务。
+
+​		CountDownLatch的场景：例如LOL或者王者荣耀游戏开始是，需要玩家全部准备好，才能进入游戏。
+
+```java
+public class CountDownLatchDemo {
+
+    public static void main(String[] args) {
+        Random random = new Random();
+        CountDownLatch latch = new CountDownLatch(5);
+        for (int i = 0; i < 5; i++) {
+            new Thread(()->{
+                System.out.println(Thread.currentThread().getName() + "载入中！");
+                try {
+                    Thread.sleep(random.nextInt(5000));
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println(Thread.currentThread().getName() + "加载完毕！");
+                latch.countDown();
+            },"玩家" + i).start();
+        }
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println("开始游戏！！");
+    }
+}
+```
+
+
+
+
+
+## 6. CyclicBarrier
+
+​		栅栏屏障，让一组线程到达一个屏障（也可以叫同步点）时被阻塞，直到最后一个线程 到达屏障时，屏障才会开门，所有被屏障拦截的线程才会继续运行。
+
+​		CyclicBarrier 和 CountDownLatch 非常类似，它也可以实现线程间的技术等待，但是它的功能比 CountDownLatch 更加复杂和强大。主要应用场景和 CountDownLatch 类似。
+
+​		**CountDownLatch的实现是基于AQS的，而CycliBarrier是基于 ReentrantLock(ReentrantLock也属于AQS同步器)和 Condition 的。**
+
+```java
+/**
+* CyclicBarrier中两个变量count和parties
+* count：还在等待的线程数
+* parties：传入的总线程数
+*/
+public class CyclicBarrierDemo {
+
+    public static void main(String[] args) {
+        Random random = new Random();
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(6);
+        for (int i = 0; i < 5; i++) {
+            new Thread(()->{
+                System.out.println(Thread.currentThread().getName() + "进入游戏！");
+                try {
+                    Thread.sleep(random.nextInt(6000));
+                    cyclicBarrier.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (BrokenBarrierException e) {
+                    e.printStackTrace();
+                }
+            },"玩家" + i).start();
+        }
+        try {
+            cyclicBarrier.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (BrokenBarrierException e) {
+            e.printStackTrace();
+        }
+        System.out.println("开始游戏！");
+    }
+}
+```
+
+
 
 
 
