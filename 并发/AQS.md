@@ -307,7 +307,7 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
         // 前节点状态为-1，需要被唤醒
         return true;
     if (ws > 0) {
-        // 前节点从队列中移除，直至找到一个可以被唤醒的节点
+        // 从队列中移除需要被取消的节点，直至找到一个可以被唤醒的节点
         do {
             node.prev = pred = pred.prev;
         } while (pred.waitStatus > 0);
