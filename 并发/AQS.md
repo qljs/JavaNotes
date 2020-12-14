@@ -19,6 +19,8 @@ AQS中定义了两种队列，分别是：
 - **同步队列**：基于双向链表，FIFO的数据结构队列，Java中的CLH队列是原CLH队列的一个变种，线程有原来的自旋变为了阻塞。
 - **条件队列**：是一个多线程间协调通信的工具类，使得某个或者某些线程一起等待某个条件（Condition），只有当该条件具备时 ，这些等待线程才会被唤醒，从而重新争夺锁。
 
+![](D:\JavaNotes\JavaNotes\images\bf\queue.png)
+
 
 
 > #### 公平锁和非公平锁
@@ -322,8 +324,6 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
 
 
 
-
-
 > #### 阻塞线程：parkAndCheckInterrupt()
 
 ```java
@@ -424,6 +424,21 @@ private void unparkSuccessor(Node node) {
 ```
 
 
+
+### 3.3 关于LockSupport的park()和unpark()
+
+​		从上面的源码分析中，可以看到在AQS中，线程的阻塞和唤醒是基于`LockSupport`中的`unpark()`和`park()`方法，而`LockSupport`中的这两个方法都是基于`Unsafe`来实现的。`park()`和`unpark()`的设计原理是‘“许可”，`park()`是等待一个许可，而`unpark()`是提供一个许可。
+
+```java
+public final class Unsafe {
+
+	public native void unpark(Object thread);
+
+    public native void park(boolean isAbsolute, long time);
+}    
+```
+
+​		
 
 ## 4.  Semaphore源码分析
 
@@ -553,7 +568,7 @@ private void doAcquireSharedInterruptibly(int arg)
 
 
 
-## 5. CountDownLatch()
+## 5. CountDownLatch
 
 ​		CountDownLatch允许 count 个线程阻塞在一个地方，直至所有线程的任务都执行完毕。
 
@@ -637,6 +652,10 @@ public class CyclicBarrierDemo {
     }
 }
 ```
+
+
+
+​		
 
 
 
