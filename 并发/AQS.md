@@ -74,6 +74,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         static final int PROPAGATE = -3;
 
         // 存储上面几个状态，使用volatile关键字，保证线程间的可见性
+        // 标志着后继节点是否需要唤醒
         volatile int waitStatus;
 		
         // 前节点
@@ -300,7 +301,7 @@ final boolean acquireQueued(final Node node, int arg) {
 
 
 
-> 检查并更新节点状态：shouldParkAfterFailedAcquire()
+> #### 检查并更新节点状态：shouldParkAfterFailedAcquire()
 
 ```java
 private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
@@ -316,6 +317,7 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
         pred.next = node;
     } else {
         // 将前节点状态设置为等待被唤醒，进入这个分支的只剩下0，-2，-3了，状态0是节点初始化时候的状态
+        // 这也是为什么之前说waitStatus存储的是下一个节点是否需要唤醒
         compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
     }
     return false;
