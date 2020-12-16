@@ -123,7 +123,6 @@ public final void await() throws InterruptedException {
     int interruptMode = 0;
     // 等待被放入同步队列
     while (!isOnSyncQueue(node)) {
-        // 因为在放入同步队列中时
         LockSupport.park(this);
         // 判断线程是否中断，不等于0时，代表中断
         if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
@@ -259,7 +258,7 @@ private void unparkSuccessor(Node node) {
                 s = t;
     }
     if (s != null)
-        // 给节点上线程一个许可，之后调用park()方法时不会被阻塞
+        // 给后继节点上线程一个许可，之后调用park()方法时不会被阻塞
         LockSupport.unpark(s.thread);
 }
 ```
@@ -273,12 +272,9 @@ private void unparkSuccessor(Node node) {
 ```java
 public final void await() throws InterruptedException {
     // 省略
-    // 释放锁，并返回持有锁时重入次数，此时其他已经已经可以重新争抢锁了
-    int savedState = fullyRelease(node);
-    int interruptMode = 0;
     // 是否被放入同步队列
     while (!isOnSyncQueue(node)) {
-        // 第一次循环时还未放入同步队列，回走入该方法，因为在上面先调用了unpark()方法，所有在这里不会被阻塞
+        // 第一次循环时还未放入同步队列，会被阻塞
         LockSupport.park(this);
         if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
             // 不等于0时，线程被中断了，也就没有必要一直循环判断了
@@ -331,7 +327,7 @@ final boolean transferAfterCancelledWait(Node node) {
         return true;
     }
 	
-    // 走到这个分支，证明线程已经被中断了。
+    // CAS更新失败。
     while (!isOnSyncQueue(node))
         // 让出CPU资源，进入就绪状态
         Thread.yield();
@@ -404,11 +400,16 @@ final boolean transferForSignal(Node node) {
     int ws = p.waitStatus;
     // 节点线程状态大于零（取消状态），或者状态更新为-1（待唤醒）时失败
     if (ws > 0 || !compareAndSetWaitStatus(p, ws, Node.SIGNAL))
-        // 给了节点上线程一个许可，即当该线程执行遇到park()时，不会阻塞
         LockSupport.unpark(node.thread);
     return true;
 }
 ```
+
+
+
+#### 2.1.4 put()方法流程图
+
+![](D:\JavaNotes\JavaNotes\images\bf\put.png)
 
 
 
@@ -442,7 +443,7 @@ private E dequeue() {
     if (itrs != null)
         // 清空迭代器
         itrs.elementDequeued();
-    // 入队将条件队列节点移入同步队列方法
+    // 入队将条件队列节点移入同步队列方法，在这里会调用unpark()方法，唤醒条件队列中被阻塞的线程
     notFull.signal();
     return x;
 }
