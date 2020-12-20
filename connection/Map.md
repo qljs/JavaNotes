@@ -541,10 +541,6 @@ final void treeify(Node<K,V>[] tab) {
 
 
 
-
-
-
-
 ### 3. Jdk1.7中的死循环问题
 
 模拟下1.7中死循环：
@@ -627,17 +623,7 @@ next不为空，继续进行第二次循环：
 
 ![](D:\JavaNotes\JavaNotes\images\connection\end.png)
 
-
-
-在1.8之后取消了1.7中的头插法，
-
-
-
-
-
-
-
-
+**在1.8及之后，扩容时移动数据取消了头插入，解决了死循环的问题**。
 
 
 
