@@ -188,7 +188,7 @@ final Entry<K,V> getEntry(Object key) {
 
 ### 2.  Jdk1.8的HashMap
 
-​		在jdk1.8中，对hashMap进行了改进，引入了红黑树，结构变为了数组+链表+红黑树。当链表长度大于8（默认值）时，会将链表转换为红黑树，若数组长度小于64时，会优先进行扩容，而不是转化为红黑树，jdk1.8中HashMap的大多数属性与jdk1.7中一样。
+在jdk1.8中，对hashMap进行了改进，引入了红黑树，结构变为了数组+链表+红黑树。当链表长度大于8（默认值）时，会将链表转换为红黑树，若数组长度小于64时，会优先进行扩容，而不是转化为红黑树，jdk1.8中HashMap的大多数属性与jdk1.7中一样。
 
 ```java
 public class HashMap<K,V> extends AbstractMap<K,V> implements Map<K,V>, Cloneable, Serializable {
@@ -359,23 +359,23 @@ void transfer(Entry[] newTable, boolean rehash) {
 }
 ```
 
-​		假设在并发情况下，有两个线程同时扩容，都走到了`transfer()`方法，线程1在执行完` Entry<K,V> next = e.next;`这一行，失去CPU时间片，此时**e指向e0，next指向e1**。
+假设在并发情况下，有两个线程同时扩容，都走到了`transfer()`方法，线程1在执行完` Entry<K,V> next = e.next;`这一行，失去CPU时间片，此时**e指向e0，next指向e1**。
 
 ![](..\images\connection\start.png)
 
 
 
-​		而线程2继续执行，线程2扩容完之后，根据缓存一致性协议，新的table最终结果如下图（假设扩容后索引位置未变）：
+而线程2继续执行，线程2扩容完之后，根据缓存一致性协议，新的table最终结果如下图（假设扩容后索引位置未变）：
 
 ![](..\images\connection\t2-end.png)
 
-​		此时线程1重新获取获取CPU执行权限，继续扩容，第一次循环结束，结果如图：
+此时线程1重新获取获取CPU执行权限，继续扩容，第一次循环结束，结果如图：
 
 ![](..\images\connection\t1-1.png)
 
 
 
-​		next不为空，继续进行第二次循环：
+next不为空，继续进行第二次循环：
 
 ![](D:\JavaNotes\JavaNotes\images\connection\end.png)
 
@@ -387,4 +387,61 @@ void transfer(Entry[] newTable, boolean rehash) {
 
 
 
-### 
+
+
+### 5. 为什么负载因子要用0.75
+
+在源码中可以这样一段话：
+
+```java
+* <p>As a general rule, the default load factor (.75) offers a good tradeoff
+* between time and space costs.  Higher values decrease the space overhead
+* but increase the lookup cost (reflected in most of the operations of the
+* <tt>HashMap</tt> class, including <tt>get</tt> and <tt>put</tt>).  The
+* expected number of entries in the map and its load factor should be taken
+* into account when setting its initial capacity, so as to minimize the
+* number of rehash operations.  If the initial capacity is greater
+* than the maximum number of entries divided by the load factor, no
+* rehash operations will ever occur. 
+```
+
+翻译过来的大概意思就是：
+
+> 负载因子选择0.75是对时间和空间的一种很好的权衡，比较大的值会减少空间开销，但是会增加查找的时间成本。
+
+HashMap中除了哈希算法之外，有两个参数影响了性能：初始容量和加载因子。初始容量是哈希表在创建时的容量，**加载因子是哈希表在其容量自动扩容之前可以达到多满的一种度量**。
+
+在维基百科来描述加载因子：
+
+> 对于开放定址法，加载因子是特别重要因素，**应严格限制在0.7-0.8以下。超过0.8，查表时的CPU缓存不命中（cache missing）按照指数曲线上升**。因此，一些采用开放定址法的hash库，如Java的系统库限制了加载因子为0.75，超过此值将resize散列表。
+
+
+
+### 6. 为什么容量要设置为2的n次方
+
+HashMap的底层是数组+链表的结构，对于数组其索引范围是[0, length -1]，为了数据的均匀分布，最直接的办法就是采用取模运算，而在HashMap中采用位运算`hash & (length - 1)`计算索引位置，是因为使用位运算的效率远高于取模运算。
+
+为什么位运算可以代替取模运算呢？实现原理如下：
+
+```
+X % 2^n = X & (2^n – 1)
+```
+
+假设n为3，则2^3 = 8，表示成2进制就是1000。2^3 -1 = 7 ，即0111。
+
+此时X & (2^3 – 1) 就相当于取X的2进制的最后三位数。
+
+从2进制角度来看，X / 8相当于 X >> 3，即把X右移3位，此时得到了X / 8的商，而被移掉的部分(后三位)，则是X % 8，也就是余数。
+
+所以只要保证length的长度是2^n 的话，就可以实现取模运算了。
+
+
+
+
+
+
+### 参考
+
+https://blog.csdn.net/NYfor2017/article/details/105454097
+
+https://juejin.cn/post/6844904016363651085	
