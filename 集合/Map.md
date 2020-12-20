@@ -4,8 +4,6 @@
 
 ## HashMap
 
-
-
 ### 1. Jdk1.7的HashMap
 
 在Jdk1.7及之前，HashMap采用的是数组+链表的结构，其中比较重要的属性如下：
@@ -52,7 +50,7 @@ public class HashMap<K,V> extends AbstractMap<K,V> implements Map<K,V>, Cloneabl
 
 ​	
 
-> #### put()方法源码分析
+#### 1.1 put()方法源码分析
 
 ```java
 public V put(K key, V value) {
@@ -66,7 +64,7 @@ public V put(K key, V value) {
     int hash = hash(key);
     // 计算出索引位置
     int i = indexFor(hash, table.length);
-    // 桶当前位置有值，若当前链表存在key相等的，则进行替换
+    // 发生hash碰撞，若当前链表存在key相等的，则进行替换
     for (Entry<K,V> e = table[i]; e != null; e = e.next) {
         Object k;
         if (e.hash == hash && ((k = e.key) == key || key.equals(k))) {
@@ -153,39 +151,6 @@ void createEntry(int hash, K key, V value, int bucketIndex) {
 
 
 
-> #### get()方法源码分析
-
-```java
-public V get(Object key) {
-    if (key == null)
-        return getForNullKey();
-    // 获取Entry
-    Entry<K,V> entry = getEntry(key);
-
-    return null == entry ? null : entry.getValue();
-}
-
-final Entry<K,V> getEntry(Object key) {
-    if (size == 0) {
-        return null;
-    }
-	// 计算hash值
-    int hash = (key == null) ? 0 : hash(key);
-    // 获取table索引位置上的值，根据key判断是否时同一个，若不是在链表上继续找
-    for (Entry<K,V> e = table[indexFor(hash, table.length)];
-         e != null;
-         e = e.next) {
-        Object k;
-        if (e.hash == hash &&
-            ((k = e.key) == key || (key != null && key.equals(k))))
-            return e;
-    }
-    return null;
-}
-```
-
-
-
 ### 2.  Jdk1.8的HashMap
 
 在jdk1.8中，对hashMap进行了改进，引入了红黑树，结构变为了数组+链表+红黑树。当链表长度大于8（默认值）时，会将链表转换为红黑树，若数组长度小于64时，会优先进行扩容，而不是转化为红黑树，jdk1.8中HashMap的大多数属性与jdk1.7中一样。
@@ -193,7 +158,7 @@ final Entry<K,V> getEntry(Object key) {
 ```java
 public class HashMap<K,V> extends AbstractMap<K,V> implements Map<K,V>, Cloneable, Serializable {
     /**
-    * 省略与1.7中一样的书信
+    * 省略与1.7中一样的属性
     */
 
     // 链表转红黑树的默认节点数
@@ -240,10 +205,11 @@ public class HashMap<K,V> extends AbstractMap<K,V> implements Map<K,V>, Cloneabl
 
 ​	
 
-> #### put()方法源码分析
+#### 2.1 put()方法源码分析
 
 ```java
 public V put(K key, V value) {
+    // JDK1.8中计算hash值的方式变成了与低16位做^位运算
     return putVal(hash(key), key, value, false, true);
 }
 
@@ -251,24 +217,32 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                boolean evict) {
     Node<K,V>[] tab; Node<K,V> p; int n, i;
     if ((tab = table) == null || (n = tab.length) == 0)
+        // table未初始化时，进行初始化
         n = (tab = resize()).length;
     if ((p = tab[i = (n - 1) & hash]) == null)
+        // table当前索引位置为空，直接插入
         tab[i] = newNode(hash, key, value, null);
     else {
         Node<K,V> e; K k;
         if (p.hash == hash &&
             ((k = p.key) == key || (key != null && key.equals(k))))
+            // 与table索引位置值相同，替换
             e = p;
         else if (p instanceof TreeNode)
+            // 发生hash碰撞，当前table节点之后为红黑树
             e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
         else {
+            // 当前节点之后为链表
             for (int binCount = 0; ; ++binCount) {
                 if ((e = p.next) == null) {
+                    // 当前节点的后继节点为空，直接插入
                     p.next = newNode(hash, key, value, null);
+                    // 链表长度超过阈值，若table长度未超过默认长度扩容，否则转为红黑树
                     if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
                         treeifyBin(tab, hash);
                     break;
                 }
+                // 替换节点
                 if (e.hash == hash &&
                     ((k = e.key) == key || (key != null && key.equals(k))))
                     break;
@@ -279,15 +253,289 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
             V oldValue = e.value;
             if (!onlyIfAbsent || oldValue == null)
                 e.value = value;
+             // LinkedHashMap重写了该方法
             afterNodeAccess(e);
             return oldValue;
         }
     }
     ++modCount;
     if (++size > threshold)
+        // 扩容
         resize();
+     // LinkedHashMap重写了该方法
     afterNodeInsertion(evict);
     return null;
+}
+```
+
+
+
+> #### 扩容：resize()
+
+```java
+final Node<K,V>[] resize() {
+    Node<K,V>[] oldTab = table;
+    int oldCap = (oldTab == null) ? 0 : oldTab.length;
+    int oldThr = threshold;
+    int newCap, newThr = 0;
+    // 旧表长度大于零，即已经初始化过
+    if (oldCap > 0) {
+        // 长度大于等于最大容量时，扩容临界值取Integer最大值
+        if (oldCap >= MAXIMUM_CAPACITY) {
+            threshold = Integer.MAX_VALUE;
+            return oldTab;
+        }
+        // 扩容两倍，小于最大容量
+        else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY &&
+                 // 旧table长度大于16
+                 oldCap >= DEFAULT_INITIAL_CAPACITY)
+            // 扩容阈值也增加两倍
+            newThr = oldThr << 1; // double threshold
+    }
+    else if (oldThr > 0)
+        // 旧table长度为0，新的长度设置为原扩容阈值
+        newCap = oldThr;
+    else {
+        // oldCap和oldThr都为0，使用默认值
+        newCap = DEFAULT_INITIAL_CAPACITY;
+        newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);
+    }
+    if (newThr == 0) {
+        // 新的扩容阈值为0，计算扩容阈值
+        float ft = (float)newCap * loadFactor;
+        newThr = (newCap < MAXIMUM_CAPACITY && ft < (float)MAXIMUM_CAPACITY ?
+                  (int)ft : Integer.MAX_VALUE);
+    }
+    threshold = newThr;
+    @SuppressWarnings({"rawtypes","unchecked"})
+    // 构建新的数组
+    Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap];
+    table = newTab;
+    if (oldTab != null) {
+        // 旧map有数据，转移数据
+        for (int j = 0; j < oldCap; ++j) {
+            Node<K,V> e;
+            if ((e = oldTab[j]) != null) { 
+                oldTab[j] = null;
+                if (e.next == null)
+                    // 当前索引位置只有table节点上有值，即后面没有链表或者红黑树，计算在新table中的位置并赋值到新位置
+                    newTab[e.hash & (newCap - 1)] = e;
+                else if (e instanceof TreeNode)
+                    // 节点是红黑树节点，调用红黑树的转移方法
+                    ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
+                else { 
+                     // 循环将旧table链表上数据转移到新的table中
+                    // loHead：索引位置为0的链表头结点，
+                    // loTail：索引位置为0的链表尾结点，
+                    Node<K,V> loHead = null, loTail = null;
+                    // hiHead：索引位置非0的链表头结点，
+                    // hiTail：索引位置非0的链表尾结点，
+                    Node<K,V> hiHead = null, hiTail = null;
+                    Node<K,V> next;
+                    do {
+                        // 可以看到1.8中，整个链表上的元素不会重新计算位置，位置有头结点决定
+                        next = e.next;
+                        if ((e.hash & oldCap) == 0) {
+                             // loTail：第一次进来，有值之后后面的节点都不断加入loTail后面
+                            if (loTail == null)
+                                loHead = e;
+                            else
+                                loTail.next = e;
+                            loTail = e;
+                        }
+                        else {
+                            if (hiTail == null)
+                                hiHead = e;
+                            else
+                                hiTail.next = e;
+                            hiTail = e;
+                        }
+                    } while ((e = next) != null);
+                    if (loTail != null) {
+                        loTail.next = null;
+                        newTab[j] = loHead;
+                    }
+                    // 非零的位置的链表，新的位置为原位置+旧oldCap长度
+                    if (hiTail != null) {
+                        hiTail.next = null;
+                        newTab[j + oldCap] = hiHead;
+                    }
+                }
+            }
+        }
+    }
+    // 旧table为空，直接返回新的数组
+    return newTab;
+}
+```
+
+
+
+> #### 扩容后红黑树节点重新计算在新数组中的位置：split()
+
+```java
+final void split(HashMap<K,V> map, Node<K,V>[] tab, int index, int bit) {
+    TreeNode<K,V> b = this;
+    // Relink into lo and hi lists, preserving order
+    TreeNode<K,V> loHead = null, loTail = null;
+    TreeNode<K,V> hiHead = null, hiTail = null;
+    // lc：记录与旧table中索引相同的节点个数，hc：记录旧table+oldCap的节点个数
+    // 用于红黑树调整后是否需要在红黑树与二叉树之间转换
+    int lc = 0, hc = 0;
+    for (TreeNode<K,V> e = b, next; e != null; e = next) {
+        // 取出该节点的下一个节点
+        next = (TreeNode<K,V>)e.next;
+        // 旧链表的赋值为空，以便垃圾回收
+        e.next = null;
+        // 若当前节点的hash与旧table的容量进行与运算结果为零，
+        // 则该节点在新table与旧table中的索引位置相同
+        if ((e.hash & bit) == 0) {
+            // 当前节点的前节点赋值为loTail，若为空，则该节点为根节点
+            if ((e.prev = loTail) == null)
+                // 根节点赋值为e
+                loHead = e;
+            else
+                // 否则loTail的下个节点赋值为当前节点e
+                loTail.next = e;
+            // 当前节点赋值给loTail
+            loTail = e;
+            // 记录与旧节点索引位置相同的节点个数
+            ++lc;
+        }
+        // 若当前节点的hash与旧table的容量进行与运算结果不为零，
+        // 则该节点在新table与旧table中的索引位置相同
+        else {
+            // 当前节点的前节点赋值为hiTail，若为空，则该节点为根节点
+            if ((e.prev = hiTail) == null)
+                hiHead = e;
+            else
+                // 否则hiTail的下个节点赋值为当前节点e
+                hiTail.next = e;
+            // 当前节点赋值给loTail
+            hiTail = e;
+            // 记录拆分到新table索引的节点个数
+            ++hc;
+        }
+    }
+
+   // 旧table索引位置节点不为空
+    if (loHead != null) {
+        // 判断是否小于转换为链表的临界值
+        if (lc <= UNTREEIFY_THRESHOLD)
+            // 红黑树转链表
+            tab[index] = loHead.untreeify(map);
+        else {
+            // 链表不需要转换，直接插入
+            tab[index] = loHead;
+            // 新table的索引位置节点不为空(旧table的红黑树已被拆分)，
+            // 重新构建红黑树
+            if (hiHead != null) // (else is already treeified)
+                loHead.treeify(tab);
+        }
+    }
+    // 新table索引位置节点不为空
+    if (hiHead != null) {
+        // 判断是否小于转换为链表的临界值
+        if (hc <= UNTREEIFY_THRESHOLD)
+            // 红黑树转链表
+            tab[index + bit] = hiHead.untreeify(map);
+        else {
+            // 链表不需要转换，直接插入
+            tab[index + bit] = hiHead;
+            // 旧table的索引位置节点不为空(旧table的红黑树部分拆分到新的位置)，
+            // 重新构建红黑树
+            if (loHead != null)
+                hiHead.treeify(tab);
+        }
+    }
+}
+
+
+/**
+*  红黑树转链表
+*/
+final Node<K,V> untreeify(HashMap<K,V> map) {
+    // hd：根节点
+    Node<K,V> hd = null, tl = null;
+    // this：调用此方法的TreeNode
+    for (Node<K,V> q = this; q != null; q = q.next) {
+        // 新建一个node节点
+        Node<K,V> p = map.replacementNode(q, null);
+        if (tl == null)
+            hd = p;
+        else
+            // 记录下一个节点
+            tl.next = p;
+        tl = p;
+    }
+    // 返回链表
+    return hd;
+}
+
+
+/**
+* 构建红黑树
+*/
+final void treeify(Node<K,V>[] tab) {
+    TreeNode<K,V> root = null;
+    // this：调用此方法的TreeNode
+    for (TreeNode<K,V> x = this, next; x != null; x = next) {
+        // 获取下个节点
+        next = (TreeNode<K,V>)x.next;
+        // 左右孩子清空
+        x.left = x.right = null;
+        // root为空时，当前节点父节点设为空，颜色变为黑色，赋值给root
+        if (root == null) {
+            x.parent = null;
+            x.red = false;
+            root = x;
+        }
+        else {
+            // 获取当前节点x的key值
+            K k = x.key;
+            // 获取当前节点x的hash值
+            int h = x.hash;
+            Class<?> kc = null;
+            // 从根节点开始循环，将当前节点变为左孩子或右孩子
+            for (TreeNode<K,V> p = root;;) {
+                // dir：向左（-1/0）或向右（1），ph：记录当前节点key的hash值
+                int dir, ph;
+                // 获取当前节点的key
+                K pk = p.key;
+                // 当前节点的hash大于要查找的节点hash值
+                if ((ph = p.hash) > h)
+                    // 向左查找
+                    dir = -1;
+                else if (ph < h)
+                    // 向右查找
+                    dir = 1;
+                // 如果要查找的节点X的key值没有实现compareble接口
+                // 或者要查找的节点X的key值与当前节点P的值相等
+                else if ((kc == null &&
+                          (kc = comparableClassFor(k)) == null) ||
+                         (dir = compareComparables(kc, k, pk)) == 0)
+                    // 使用自定义的比较规则决定向左或向右查找
+                    dir = tieBreakOrder(k, pk);
+                // 当前节点P赋值给xp
+                TreeNode<K,V> xp = p;
+                // 左孩子或右孩子为空时插入
+                if ((p = (dir <= 0) ? p.left : p.right) == null) {
+                    // 查找节点X的父节点设置为p
+                    x.parent = xp;
+                    // 判断成为左孩子或右孩子
+                    if (dir <= 0)
+                        xp.left = x;
+                    else
+                        xp.right = x;
+                    // 平衡红黑树，主要涉及变色和旋转
+                    root = balanceInsertion(root, x);
+                    break;
+                }
+            }
+        }
+    }
+    // 确保root节点为根节点
+    moveRootToFront(tab, root);
 }
 ```
 
@@ -381,6 +629,10 @@ next不为空，继续进行第二次循环：
 
 
 
+在1.8之后取消了1.7中的头插法，
+
+
+
 
 
 
@@ -439,8 +691,22 @@ X % 2^n = X & (2^n – 1)
 
 
 
+## 附录
 
-### 参考
+> #### 红黑树
+
+在某些情况下二叉查找树可能会变成单链表结构(如插入的值一直小于父节点)，从而导致性能大打折扣，红黑树是一种平衡二叉查找树，其最长路径不会超过最短路径的两倍，除了符合二查找叉树的特性外，还具有一下五种特性
+
+1. 每个节点要么是黑色，要么是红色；
+2. 根节点是黑色；
+3. 每个叶节点是黑色；
+4. 红节点的子节点都是黑色；
+5. 任意黑色节点到每个子节点的路径都包含相同个数的黑色节点。
+
+
+
+
+## 参考
 
 https://blog.csdn.net/NYfor2017/article/details/105454097
 
