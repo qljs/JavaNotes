@@ -124,7 +124,7 @@ key列表示MySQL执行时真正走的索引，可以使用 force index来指定
 
 - ##### 最左前缀原则
 
-最左前缀原则指查询条件从最左前开始且不跳过中间索引，因为聚合索引是根据建立的索引顺序来排序的，所以后面索引的有序性时建立在前面索引有序性上的，对于跳过中间索引则会导致后面的索引失效。
+最左前缀原则指查询条件从最左前开始且不跳过中间索引，因为聚合索引是根据建立的索引顺序来排序的，所以单单比较第二个索引是无序的，对于跳过中间索引，会导致后面的索引失效。
 
 - ##### 不要再索引列上做任何操作，例如计算、函数、类型转换等，会导致索引失效；
 
@@ -135,4 +135,210 @@ key列表示MySQL执行时真正走的索引，可以使用 force index来指定
 - ##### like操作以通配符开头会导致索引失效，对于 like key%，相当于时常量，而 like %key则是范围查找；
 
 - ##### 尽量避免使用in或on，mysql也可能会放弃走索引；
+
+
+
+## 三 order by的优化
+
+1. **order by**：MySQL支持两种排序方式，分别是**filesort**和**index**，Using index是指MySQL扫描索引本身完成排序。index效率高，fielesort效率低。
+2. order by满足两种情况会使用Using index。
+
+- order by语句使用索引最左前列；
+- 使用where子句与order by子句条件列组合满足索引最左前列。
+
+3. 尽量在索引列上完成排序，遵循索引建立（索引创建的顺序）时的最左前缀法则。
+4. 如果order by的条件不在索引列上，就会产生Using filesort。
+5. 能用覆盖索引尽量用覆盖索引。
+6. 、group by与order by很类似，其实质是先排序后分组，遵照索引创建顺序的最左前缀法则。对于groupby的优化如果不需要排序的可以加上order by null禁止排序。
+
+> #### Using filesort文件排序原理
+
+- 单路排序：是一次性取出满足条件行的所有字段，然后在sort buffer中进行排序；
+- 双路排序（又叫回表排序模式）：是首先根据相应的条件取出相应的排序字段和可以直接定位行数据的行 ID，然后在 sort buffer 中进行排序，排序完后需要再次取回其它需要的字段。
+
+
+
+## 四 trace工具
+
+使用trace工具可以查看mysql底层的优化结果：
+
+```json
+# 开启trace，trace会收集各种信息，开启后影响mysql性能
+set session optimizer_trace="enabled=on",end_markers_in_json=on; 
+
+SELECT * from user order by id;
+SELECT * FROM information_schema.OPTIMIZER_TRACE;
+
+{
+  "steps": [
+    {
+      "join_preparation": { # 第一阶段：SQL准备阶段
+        "select#": 1,
+        "steps": [
+          {
+            "expanded_query": "/* select#1 */ select `user`.`id` AS `id`,`user`.`username` AS `username`,`user`.`password` AS `password` from `user` order by `user`.`username`"
+          }
+        ] /* steps */
+      } /* join_preparation */
+    },
+    {
+      "join_optimization": { # SQL优化阶段
+        "select#": 1,
+        "steps": [
+          {
+            "substitute_generated_columns": {
+            } /* substitute_generated_columns */
+          },
+          {
+            "table_dependencies": [
+              {
+                "table": "`user`",
+                "row_may_be_null": false,
+                "map_bit": 0,
+                "depends_on_map_bits": [
+                ] /* depends_on_map_bits */
+              }
+            ] /* table_dependencies */
+          },
+          {
+             "rows_estimation": [ #预估表的访问成本
+              {
+                "table": "`user`",
+                "table_scan": { # 全表扫描情况
+                  "rows": 1,    # 扫描行数
+                  "cost": 0.25  # 查询成本
+                } /* table_scan */
+              }
+            ] /* rows_estimation */
+          },
+          {
+            "considered_execution_plans": [
+              {
+                "plan_prefix": [
+                ] /* plan_prefix */,
+                "table": "`user`",
+                "best_access_path": {
+                  "considered_access_paths": [
+                    {
+                      "rows_to_scan": 1,
+                      "access_type": "scan",
+                      "resulting_rows": 1,
+                      "cost": 0.35,
+                      "chosen": true,
+                      "use_tmp_table": true
+                    }
+                  ] /* considered_access_paths */
+                } /* best_access_path */,
+                "condition_filtering_pct": 100,
+                "rows_for_plan": 1,
+                "cost_for_plan": 0.35,
+                "sort_cost": 1,
+                "new_cost_for_plan": 1.35,
+                "chosen": true
+              }
+            ] /* considered_execution_plans */
+          },
+          {
+            "attaching_conditions_to_tables": {
+              "original_condition": null,
+              "attached_conditions_computation": [
+              ] /* attached_conditions_computation */,
+              "attached_conditions_summary": [
+                {
+                  "table": "`user`",
+                  "attached": null
+                }
+              ] /* attached_conditions_summary */
+            } /* attaching_conditions_to_tables */
+          },
+          {
+            "optimizing_distinct_group_by_order_by": {
+              "simplifying_order_by": {
+                "original_clause": "`user`.`username`",
+                "items": [
+                  {
+                    "item": "`user`.`username`"
+                  }
+                ] /* items */,
+                "resulting_clause_is_simple": true,
+                "resulting_clause": "`user`.`username`"
+              } /* simplifying_order_by */
+            } /* optimizing_distinct_group_by_order_by */
+          },
+          {
+            "reconsidering_access_paths_for_index_ordering": {
+              "clause": "ORDER BY",
+              "steps": [
+              ] /* steps */,
+              "index_order_summary": {
+                "table": "`user`",
+                "index_provides_order": false,
+                "order_direction": "undefined",
+                "index": "unknown",
+                "plan_changed": false
+              } /* index_order_summary */
+            } /* reconsidering_access_paths_for_index_ordering */
+          },
+          {
+            "finalizing_table_conditions": [
+            ] /* finalizing_table_conditions */
+          },
+          {
+            "refine_plan": [
+              {
+                "table": "`user`"
+              }
+            ] /* refine_plan */
+          },
+          {
+            "considering_tmp_tables": [
+              {
+                "adding_sort_to_table_in_plan_at_position": 0
+              } /* filesort */
+            ] /* considering_tmp_tables */
+          }
+        ] /* steps */
+      } /* join_optimization */
+    },
+    {
+      "join_execution": {
+        "select#": 1,
+        "steps": [
+          {
+            "sorting_table_in_plan_at_position": 0,
+            "filesort_information": [
+              {
+                "direction": "asc",
+                "table": "`user`",
+                "field": "username"
+              }
+            ] /* filesort_information */,
+            "filesort_priority_queue_optimization": {
+              "usable": false,
+              "cause": "not applicable (no LIMIT)"
+            } /* filesort_priority_queue_optimization */,
+            "filesort_execution": [
+            ] /* filesort_execution */,
+            "filesort_summary": {
+              "memory_available": 262144,
+              "key_size": 4093,
+              "row_size": 4093,
+              "max_rows_per_buffer": 63,
+              "num_rows_estimate": 1213,
+              "num_rows_found": 1,
+              "num_initial_chunks_spilled_to_disk": 0,
+              "peak_memory_used": 32776,
+              "sort_algorithm": "none",
+              "unpacked_addon_fields": "max_length_for_sort_data",
+              "sort_mode": "<varlen_sort_key, rowid>"
+            } /* filesort_summary */
+          }
+        ] /* steps */
+      } /* join_execution */
+    }
+  ] /* steps */
+}
+```
+
+
 
