@@ -118,7 +118,7 @@ key列表示MySQL执行时真正走的索引，可以使用 force index来指定
 
 
 
-## 二 某些使索引无效的操作
+## 二 一些使索引无效的操作
 
 基于MySQL版本为5.7
 
@@ -138,27 +138,95 @@ key列表示MySQL执行时真正走的索引，可以使用 force index来指定
 
 
 
-## 三 order by的优化
+## 三 一些优化方案
 
-1. **order by**：MySQL支持两种排序方式，分别是**filesort**和**index**，Using index是指MySQL扫描索引本身完成排序。index效率高，fielesort效率低。
-2. order by满足两种情况会使用Using index。
+### 1. order by和group by优化
+
+1. order by：MySQL支持两种排序方式，分别是**filesort**和**index**，Using index是指MySQL扫描索引本身完成排序。index效率高，fielesort效率低。
+2. order by满足以下两种情况会使用Using index。
 
 - order by语句使用索引最左前列；
 - 使用where子句与order by子句条件列组合满足索引最左前列。
 
 3. 尽量在索引列上完成排序，遵循索引建立（索引创建的顺序）时的最左前缀法则。
+
 4. 如果order by的条件不在索引列上，就会产生Using filesort。
+
 5. 能用覆盖索引尽量用覆盖索引。
+
 6. 、group by与order by很类似，其实质是先排序后分组，遵照索引创建顺序的最左前缀法则。对于groupby的优化如果不需要排序的可以加上order by null禁止排序。
+
+   
 
 > #### Using filesort文件排序原理
 
-- 单路排序：是一次性取出满足条件行的所有字段，然后在sort buffer中进行排序；
-- 双路排序（又叫回表排序模式）：是首先根据相应的条件取出相应的排序字段和可以直接定位行数据的行 ID，然后在 sort buffer 中进行排序，排序完后需要再次取回其它需要的字段。
+- **单路排序**：是一次性取出满足条件行的所有字段，然后在sort buffer中进行排序；
+- **双路排序**（又叫回表排序模式）：是首先根据相应的条件取出相应的排序字段和可以直接定位行数据的行 ID，然后在 sort buffer 中进行排序，排序完后需要再次取回其它需要的字段。
 
 
 
-## 四 trace工具
+### 2. 分页查询优化
+
+**对于分页查询**`limit start num`，**mysql会查询start+num条数据，然后抛弃前start条。**
+
+如果存在连续自增的字段，可以直接计算出 start 对应的值，减少查询范围；若不存在，则可以先只查询主键，过滤一些数据：
+
+```mssql
+select * from table_a a (select id from table_a order by col limit start, num) temp on a.id = temp.id
+```
+
+
+
+### 3. join关联查询优化
+
+MySQL表关联常见的算法有两种：
+
+- **Nested-Loop Join（NLJ）算法**
+- **Block Nested-Loop Join（BNL）算法**
+
+> #### 循环嵌套链接 Nested-Lopp Join(NLJ)算法
+
+从第一张表中（**驱动表**）循环的一次一行读取数据，然后取出这一行的关联数据，去连一张表（**被驱动表**）取出满足关条件的行，最终返回两张表的结果集。
+
+在MySQL中，优化器一般会选择小表（不一定是数据量大小，而是看条件过滤后的数据量）作为驱动表。
+
+在执行计划Extra字段中，没有出现Using join buffer(Block Nested Loop)表示采用的是NLJ算法。
+
+![image-20201223114807202](..\images\mysql\blj.png) 
+
+
+
+> #### 基于块的循环嵌套链接 Block Nested-Loop Join(BNL)算法
+
+从驱动表的读出部分数据到缓冲区（join_buffer），然后逐行读取被驱动表与缓冲区中的驱动表数据做关联比较，最后将结果返回，也就是说该算法会扫描被驱动表全表，性能较差。
+
+
+
+### 4. in 和 exsits优化
+
+in 和 exits的优化原则是**小表驱动大表**，例如：
+
+```sql
+-- 当table_b数据集小于table_a数据集时，in优先exsits
+select * from table_a where id in (select id from table_b)
+
+# 相当于
+for(select id from table_b){
+	select * from table_a where a.id=b.id
+}
+
+-- 当table_b数据集小于table_a数据集时，exsits优先in
+select * from table_a where exsits (select 1 from table_b)
+
+# 相当于，实际执行可能不是逐行对比
+for(select id from table_a){
+	select * from table_b where a.id=b.id
+}
+```
+
+
+
+## 五 trace工具
 
 使用trace工具可以查看mysql底层的优化结果：
 
