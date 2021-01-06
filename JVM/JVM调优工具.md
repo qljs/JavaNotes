@@ -60,7 +60,7 @@
 
 `jinfo -flags`：查看JVM参数
 
-![image-20201230141424173](..\jinfo_flags.png)
+![image-20201230141424173](..\images\jvm\jinfo_flags.png)
 
 
 
@@ -72,7 +72,7 @@ jstat命令可查看堆内存各部分使用量，以及加载类的数量。
 
 **垃圾回收统计：jstat -gc**
 
-![image-20201230145829147](..\jstat.png)
+![image-20201230145829147](..\images\jvm\jstat.png)
 
 - S0C：第一个幸存区（survivor）大小
 - S1C：第二个幸存区大小
@@ -96,7 +96,7 @@ jstat命令可查看堆内存各部分使用量，以及加载类的数量。
 
 **堆内存统计：jstat -gccapacity**
 
-![](..\jstat-gcc.png)
+![](..\images\jvm\jstat-gcc.png)
 
 - NGCMN：新生代最小容量
 - NGCMX：新生代最大容量 

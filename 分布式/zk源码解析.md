@@ -266,11 +266,163 @@ public long loadDataBase() throws IOException {
 
 
 
+### 2. 初始化对外服务
+
+```java
+private void startServerCnxnFactory() {
+    if (cnxnFactory != null) {
+        // 启动服务
+        cnxnFactory.start();
+    }
+    if (secureCnxnFactory != null) {
+        secureCnxnFactory.start();
+    }
+}
+
+/**
+* cnxnFactory.start();
+*/
+public void start() {
+    if (listenBacklog != -1) {
+        bootstrap.option(ChannelOption.SO_BACKLOG, listenBacklog);
+    }
+    LOG.info("binding to port {}", localAddress);
+    parentChannel = bootstrap.bind(localAddress).syncUninterruptibly().channel();
+    // Port changes after bind() if the original port was 0, update
+    // localAddress to get the real port.
+    localAddress = (InetSocketAddress) parentChannel.localAddress();
+    LOG.info("bound to port {}", getLocalPort());
+}
+```
+
+
+
+`ServerCnxnFactory`用于构建网络I/O，通过 NIO 或者 Netty 的建立 socket 通道，其 UML 图如下。
+
+
+
+![](..\images\zk\servercnxnfactory.png)
 
 
 
 
 
+> #### 初始化 netty 工厂
+
+```java
+NettyServerCnxnFactory() {
+    x509Util = new ClientX509Util();
+
+    boolean usePortUnification = Boolean.getBoolean(PORT_UNIFICATION_KEY);
+    LOG.info("{}={}", PORT_UNIFICATION_KEY, usePortUnification);
+    if (usePortUnification) {
+        try {
+            QuorumPeerConfig.configureSSLAuth();
+        } catch (QuorumPeerConfig.ConfigException e) {
+            LOG.error("unable to set up SslAuthProvider, turning off client port unification", e);
+            usePortUnification = false;
+        }
+    }
+    this.shouldUsePortUnification = usePortUnification;
+
+    this.advancedFlowControlEnabled = Boolean.getBoolean(NETTY_ADVANCED_FLOW_CONTROL);
+    LOG.info("{} = {}", NETTY_ADVANCED_FLOW_CONTROL, this.advancedFlowControlEnabled);
+
+    setOutstandingHandshakeLimit(Integer.getInteger(OUTSTANDING_HANDSHAKE_LIMIT, -1));
+
+    // 创建线程组，用于处理与客户端的I/O
+    EventLoopGroup bossGroup = NettyUtils.newNioOrEpollEventLoopGroup(NettyUtils.getClientReachableLocalInetAddressCount());
+    // 创建工作线程组 
+    EventLoopGroup workerGroup = NettyUtils.newNioOrEpollEventLoopGroup();
+    ServerBootstrap bootstrap = new ServerBootstrap().group(bossGroup, workerGroup)
+        .channel(NettyUtils.nioOrEpollServerSocketChannel())
+        // parent channel options
+        .option(ChannelOption.SO_REUSEADDR, true)
+        // child channels options
+        .childOption(ChannelOption.TCP_NODELAY, true)
+        .childOption(ChannelOption.SO_LINGER, -1)
+        // 添加管道流
+        .childHandler(new ChannelInitializer<SocketChannel>() {
+            @Override
+            protected void initChannel(SocketChannel ch) throws Exception {
+                ChannelPipeline pipeline = ch.pipeline();
+                if (advancedFlowControlEnabled) {
+                    pipeline.addLast(readIssuedTrackingHandler);
+                }
+                if (secure) {
+                    initSSL(pipeline, false);
+                } else if (shouldUsePortUnification) {
+                    initSSL(pipeline, true);
+                }
+                pipeline.addLast("servercnxnfactory", channelHandler);
+            }
+        });
+    this.bootstrap = configureBootstrapAllocator(bootstrap);
+    this.bootstrap.validate();
+}
+```
+
+`EventLoopGroup`的 UML 图如下，实现了`ExecutorSerivice`，
+
+![image-20210105112358148](..\images\zk\eventloopgroup.png)
+
+
+
+### 3. 选举
+
+```java
+public synchronized void startLeaderElection() {
+    try {
+        // 判断是否时LOOKING状态
+        if (getPeerState() == ServerState.LOOKING) {
+            // getLastLoggedZxid()：获取最大zxid
+            // getCurrentEpoch()：获取选取轮数
+            currentVote = new Vote(myid, getLastLoggedZxid(), getCurrentEpoch());
+        }
+    } catch (IOException e) {
+        RuntimeException re = new RuntimeException(e.getMessage());
+        re.setStackTrace(e.getStackTrace());
+        throw re;
+    }
+
+    this.electionAlg = createElectionAlgorithm(electionType);
+}
+
+/**
+* 创建选举算法，默认是3，即FastLeaderElection
+*/
+protected Election createElectionAlgorithm(int electionAlgorithm) {
+    Election le = null;
+
+    //TODO: use a factory rather than a switch
+    switch (electionAlgorithm) {
+        case 1:
+            throw new UnsupportedOperationException("Election Algorithm 1 is not supported.");
+        case 2:
+            throw new UnsupportedOperationException("Election Algorithm 2 is not supported.");
+        case 3:
+            QuorumCnxManager qcm = createCnxnManager();
+            QuorumCnxManager oldQcm = qcmRef.getAndSet(qcm);
+            if (oldQcm != null) {
+                LOG.warn("Clobbering already-set QuorumCnxManager (restarting leader election?)");
+                oldQcm.halt();
+            }
+            QuorumCnxManager.Listener listener = qcm.listener;
+            if (listener != null) {
+                listener.start();
+                FastLeaderElection fle = new FastLeaderElection(this, qcm);
+                fle.start();
+                le = fle;
+            } else {
+                LOG.error("Null listener when initializing cnx manager");
+            }
+            break;
+        default:
+            assert false;
+    }
+    return le;
+}
+```
 
 
 
