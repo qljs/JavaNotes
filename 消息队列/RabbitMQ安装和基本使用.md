@@ -6,7 +6,8 @@
 
 ```sh
 # 直接下载安装包
-https://packagecloud.io/rabbitmq/erlang/install#bash-rpm
+https://packagecloud.io/rabbitmq/erlang/install
+# bash-rpm
 wget https://packagecloud.io/rabbitmq/erlang/packages/el/7/erlang-23.2.1-1.el7.x86_64.rpm
 # 用命令安装
 curl -s https://packagecloud.io/install/repositories/rabbitmq/erlang/script.rpm.sh | sudo bash
@@ -339,3 +340,12 @@ public class TopicProducer {
 ## 4. 镜像模式
 
 在镜像集群模式下，你创建的 queue，无论元数据还是 queue 里的消息都会**存在于多个实例上**，就是说，每个 RabbitMQ 节点都有这个 queue 的一个**完整镜像**，包含 queue 的全部数据的意思。然后每次你写消息到 queue 的时候，都会自动把**消息同步**到多个实例的 queue 上。
+
+**搭建步骤：**
+
+1. 把主节点的 cookie 复制到从节点上：
+
+```sh
+scp /var/lib/rabbitmq/.erlang.cookie 172.16.32.18:/var/lib/rabbitmq/
+```
+
