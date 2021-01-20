@@ -151,6 +151,101 @@ RocketMQ会为每个消费组都设置一个Topic名称为“%RETRY%+consumerGro
 
 
 
+
+
+
+
+### 2. 设计
+
+![](..\images\mq\rocketmq_design.png)
+
+**索引文件由索引文件头（IndexHeader）+（ 槽位 Slot ）+（消息的索引内容）三部分构成。**
+
+
+
+### 3. 消息刷盘
+
+![](..\images\mq\rocketmq_design_2.png)
+
+消息刷盘即将消息写入到磁盘中，防止服务器宕机丢失消息。
+
+RocketMQ 中的消息刷盘：
+
+- **同步刷盘：**在消息持久化到磁盘后 RocketMQ 才会返回给生产者响应，性能较低，消息可靠性较好。
+- **异步刷盘：**能够充分利用 OS 的 PageCache 的优势，只要消息写入PageCache即可将成功的ACK返回给Producer端。消息刷盘采用后台异步线程提交的方式进行，降低了读写延迟，提高了MQ的性能和吞吐量。
+
+**页缓存（PageCache)是OS对文件的缓存，用于加速对文件的读写。一般来说，程序对文件进行顺序读写的速度几乎接近于内存的读写速度，主要原因就是由于OS使用PageCache机制对读写访问操作进行了性能优化，将一部分的内存用作PageCache**。
+
+另外，RocketMQ主要通过MappedByteBuffer对文件进行读写操作。其中，利用了NIO中的FileChannel模型将磁盘上的物理文件直接映射到用户态的内存地址中（这种Mmap的方式减少了传统IO将磁盘文件数据在操作系统内核地址空间的缓冲区和用户应用程序地址空间的缓冲区之间来回进行拷贝的性能开销），将对文件的操作转化为直接对内存地址进行操作，从而极大地提高了文件的读写效率（正因为需要使用内存映射机制，故RocketMQ的文件存储都使用定长结构来存储，方便一次将整个文件映射至内存）。
+
+
+
+> #### 零拷贝刷盘
+
+以 Linxu 系统文件下载为例，服务端的主要任务是：将服务端主机磁盘中的文件不做修改地从已连 接的socket发出去。操作系统底层I/O过程如下图所示：
+
+![](..\images\mq\zero-copy-1.png)
+
+在这个过程中，总共设计到了四次拷贝：
+
+1.  将磁盘文件拷贝到内核空间的页缓存中；
+2.  将文件拷贝到用户空间的缓存中；
+3.  将用户空间缓存中的文件拷贝写入到 Socket 缓冲区；
+4.  将 Socket 缓冲区中的文件拷贝进行网络传输。
+
+**DMA也就是直接内存访问（Direct Memory Access）技术，在进行 I/O 设备和内存的数据传输的时候，数据搬运的工作全部交给 DMA 控制器，而 CPU 不再参与任何与数据搬运相关的事情，这样 CPU 就可以去处理别的事务**。
+
+零拷贝主要的任务就是避免CPU将数据从一块存储拷贝到另外一块存储，主要就是利用各种零拷贝技术，避免让CPU做大量的数据拷贝任务，减少不必要的拷贝，或者让别的组件来做这一类简单的数据传输任务，让CPU解脱出来专注于别的任务。这样就可以让系统资源的利用更加有效。 
+
+原理是磁盘上的数据会通过DMA被拷贝的内核缓冲区，接着操作系统会把这段内核缓冲区与应用程序共享，这样就不需要把内核缓冲区的内容往用户空间拷贝。应用程序再调用 write(),操作系统直接将内核缓冲区的内容拷贝到socket缓冲区中，这一切都发生在内核态，最后，socket缓冲区再把数据发到网卡去。
+
+![](..\images\mq\zero-copy-2.png)
+
+### 4. 负载均衡
+
+RocketMQ中的负载均衡都在Client端完成，具体来说的话，主要可以分为Producer端发送消息时候的负载均衡和Consumer端订阅消息的负载均衡。
+
+#### 4.1 Producer的负载均衡
+
+Producer端在发送消息的时候，会先根据Topic找到指定的TopicPublishInfo，在获取了TopicPublishInfo路由信息后，RocketMQ的客户端在默认方式下selectOneMessageQueue()方法会从TopicPublishInfo中的messageQueueList中选择一个队列（MessageQueue）进行发送消息。具体的容错策略均在MQFaultStrategy这个类中定义。这里有一个sendLatencyFaultEnable开关变量，如果开启，在随机递增取模的基础上，再过滤掉not available的Broker代理。所谓的"latencyFaultTolerance"，是指对之前失败的，按一定的时间做退避。例如，如果上次请求的latency超过550Lms，就退避3000Lms；超过1000L，就退避60000L；如果关闭，采用随机递增取模的方式选择一个队列（MessageQueue）来发送消息，latencyFaultTolerance机制是实现消息发送高可用的核心关键所在。
+
+#### 4.2 Consumer的负载均衡
+
+在RocketMQ中，Consumer端的两种消费模式（Push/Pull）都是基于拉模式来获取消息的，而在Push模式只是对pull模式的一种封装，其本质实现为消息拉取线程在从服务器拉取到一批消息后，然后提交到消息消费线程池后，又“马不停蹄”的继续向服务器再次尝试拉取消息。如果未拉取到消息，则延迟一下又继续拉取。在两种基于拉模式的消费方式（Push/Pull）中，均需要Consumer端在知道从Broker端的哪一个消息队列—队列中去获取消息。因此，有必要在Consumer端来做负载均衡，即Broker端中多个MessageQueue分配给同一个ConsumerGroup中的哪些Consumer消费。
+
+
+
+### 5. 事务消息
+
+Apache RocketMQ在4.3.0版中已经支持分布式事务消息，这里RocketMQ采用了2PC的思想来实现了提交事务消息，同时增加一个补偿逻辑来处理二阶段超时或者失败的消息，如下图所示。
+
+![](..\images\mq\rocketmq_tx.png)
+
+**事务消息的大致分为两个流程：正常事务消息的发送及提交、事务消息的补偿流程。**
+
+- **事务提交和发送**
+
+1. 发送 half 消息；
+2. 服务端响应消息写入结果；
+3. 根据结果执行本地事务；
+4. 根据本地事务执行 commit 或 rollback；
+
+- **事务消息补偿**
+
+1. 对没有 commit 或 rollback 的事务进行一次回查；
+2. 生产者收到回查消息，检查本地事务消息状态；
+3. 根据本地事务状态重新 commit 或 rollback。
+
+
+
+> #### 事务消息的限制
+
+1. 事务消息不支持延时消息和批量消费；
+2. 事务性消息可能不止一次被检查或消费；
+3. 事务消息的生产者 ID 不能和其他类型消息生产者 ID 共享。与其他类型的消息不 15 同，事务消息允许反向查询、MQ服务器能通过它们的生产者 ID 查询到消费者。
+4. 事务消息将在 Broker 配置文件中的参数 transactionMsgTimeout 这样的特定时间之后被检查。当发送事务消息时，用户还可以通过设置用户属性 CHECK_IMMUNITY_TIME_I N_SECONDS 来改变这个限制，该参数优先于 transactionMsgTimeout 参数。
+5. 为了避免单个消息被检查太多次而导致半队列消息累积，默认单个消息的检查次数限制为 15 次，但是用户可以通过 Broker 配置文件的 transactionCheckMax参数来修改。如果已经检查某条消息超过 N 次的话（ N = transactionCheckMax ） 则 Broker 将丢弃此消息，并在默认情况下同时打印错误日志。用户可以通过重写 AbstractTransactionCheckListener 来修改这个行为。
+
 ## 参考
 
 https://github.com/apache/rocketmq/tree/master/docs/cn
