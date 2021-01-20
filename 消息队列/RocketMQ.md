@@ -145,9 +145,38 @@ RocketMQ会为每个消费组都设置一个Topic名称为“%RETRY%+consumerGro
 
 在 RocketMQ 中主要分为四部分：生产者、消费者、BrokerServer、NameServer。
 
-- 生产者：发布消息的角色，通过MQ的负载均衡模块选择相应的Broker集群队列进行消息投递，投递的过程支持快速失败并且低延迟。
+- 生产者：发布消息的角色；通过MQ的负载均衡模块选择相应的Broker集群队列进行消息投递，投递的过程支持快速失败并且低延迟。
+- 消费者：消费消息的角色；支持 push、pull 模式消费消息，也支持广播和订阅机制。
+- NameServer：简单的 Topic 路由注册中心，相当于 zk，支持 broker 的动态注册和发现。主要包括两个功能：broker 管理，保存 broker 集群的全量注册信息，提供心跳检测；路由信息管理：保存关于Broker集群的整个路由信息和用于客户端查询的队列信息，消费者和生产者通过 NameServer 获取整个 Broker 集群的路由信息，用于消息投递和消费。
+- BrokerServer：Broker主要负责消息的存储、投递和查询以及服务高可用保证，为了实现这些功能，Broker包含了以下几个重要子模块。
+  - Remoting Module：整个Broker的实体，负责处理来自clients端的请求。
+  - Client Manager：负责管理客户端(Producer/Consumer)和维护Consumer的Topic订阅信息。
+  - Store Service：提供方便简单的API接口处理消息存储到物理硬盘和查询功能。
+  - HA Service：高可用服务，提供Master Broker 和 Slave Broker之间的数据同步功能。
+  - Index Service：根据特定的Message key对投递到Broker的消息进行索引服务，以提供消息的快速查询。
+
+### RocketMQ 网络部署特点
+
+- NameServer是一个几乎无状态节点，可集群部署，节点之间无任何信息同步。
+- Broker部署相对复杂，Broker分为Master与Slave，一个Master可以对应多个Slave，但是一个Slave只能对应一个Master，Master与Slave 的对应关系通过指定相同的BrokerName，不同的BrokerId 来定义，BrokerId为0表示Master，非0表示Slave。Master也可以部署多个。每个Broker与NameServer集群中的所有节点建立长连接，定时注册Topic信息到所有NameServer。 注意：当前RocketMQ版本在部署架构上支持一Master多Slave，但只有BrokerId=1的从服务器才会参与消息的读负载。
+- Producer与NameServer集群中的其中一个节点（随机选择）建立长连接，定期从NameServer获取Topic路由信息，并向提供Topic 服务的Master建立长连接，且定时向Master发送心跳。Producer完全无状态，可集群部署。
+- Consumer与NameServer集群中的其中一个节点（随机选择）建立长连接，定期从NameServer获取Topic路由信息，并向提供Topic服务的Master、Slave建立长连接，且定时向Master、Slave发送心跳。Consumer既可以从Master订阅消息，也可以从Slave订阅消息，消费者在向Master拉取消息时，Master服务器会根据拉取偏移量与最大偏移量的距离（判断是否读老消息，产生读I/O），以及从服务器是否可读等因素建议下一次是从Master还是Slave拉取。
 
 
+
+### 2. 设计
+
+#### 2.1 消息存储
+
+RocketMQ 消息存储主要包括以下三个文件：
+
+- **commitLog：**存储生产端写入的消息主体及元数据，单个文件大小默认1G，文件名为起始偏移量。
+- **consumeQueue：**消息消费队列，主要作用是为了提高消息消费的性能，消费者可以根据 consumeQueue 查找待消费的消息。其中保存了指定 Topic 下的队列消息在 commitLog 中的起始物理偏移量 offset（8个字节），消息大小 size（4字节）和消息 Tag 的 hashCode（8个字节）值。
+- **indexFile**：索引文件，提供了通过 key 或时间区间查询消息的方式。IndexFile的底层存储设计为在文件系统中实现HashMap结构，故rocketmq的索引文件其底层实现为hash索引。
+
+在上面的RocketMQ的消息存储整体架构图中可以看出，RocketMQ采用的是混合型的存储结构，即为Broker单个实例下所有的队列共用一个日志数据文件（即为CommitLog）来存储。RocketMQ的混合型存储结构(多个Topic的消息实体内容都存储于一个CommitLog中)针对Producer和Consumer分别采用了数据和索引部分相分离的存储结构，Producer发送消息至Broker端，然后Broker端使用同步或者异步的方式对消息刷盘持久化，保存至CommitLog中。只要消息被刷盘持久化至磁盘文件CommitLog中，那么Producer发送的消息就不会丢失。正因为如此，Consumer也就肯定有机会去消费这条消息。当无法拉取到消息后，可以等下一次消息拉取，同时服务端也支持长轮询模式，如果一个消息拉取请求未拉取到消息，Broker允许等待30s的时间，只要这段时间内有新消息到达，将直接返回给消费端。这里，RocketMQ的具体做法是，使用Broker端的后台服务线程—ReputMessageService不停地分发请求并异步构建ConsumeQueue（逻辑消费队列）和IndexFile（索引文件）数据。
+
+### 
 
 
 
