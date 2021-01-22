@@ -164,31 +164,23 @@ RocketMQ会为每个消费组都设置一个Topic名称为“%RETRY%+consumerGro
 
 
 
-### 2. 设计
+### 2. 消息存储
 
-#### 2.1 消息存储
+![](..\images\mq\rocketmq_design.png)
 
-RocketMQ 消息存储主要包括以下三个文件：
+ RocketMQ 消息存储主要包括以下三个文件：
 
 - **commitLog：**存储生产端写入的消息主体及元数据，单个文件大小默认1G，文件名为起始偏移量。
+
 - **consumeQueue：**消息消费队列，主要作用是为了提高消息消费的性能，消费者可以根据 consumeQueue 查找待消费的消息。其中保存了指定 Topic 下的队列消息在 commitLog 中的起始物理偏移量 offset（8个字节），消息大小 size（4字节）和消息 Tag 的 hashCode（8个字节）值。
-- **indexFile**：索引文件，提供了通过 key 或时间区间查询消息的方式。IndexFile的底层存储设计为在文件系统中实现HashMap结构，故rocketmq的索引文件其底层实现为hash索引。
+
+- **indexFile**：索引文件，提供了通过 key 或时间区间查询消息的方式。IndexFile的底层存储设计为在文件系统中实现HashMap结构，故rocketmq的索引文件其底层实现为hash索引。**索引文件由索引文件头（IndexHeader）+（ 槽位 Slot ）+（消息的索引内容）三部分构成。**
+
+  
 
 在上面的RocketMQ的消息存储整体架构图中可以看出，RocketMQ采用的是混合型的存储结构，即为Broker单个实例下所有的队列共用一个日志数据文件（即为CommitLog）来存储。RocketMQ的混合型存储结构(多个Topic的消息实体内容都存储于一个CommitLog中)针对Producer和Consumer分别采用了数据和索引部分相分离的存储结构，Producer发送消息至Broker端，然后Broker端使用同步或者异步的方式对消息刷盘持久化，保存至CommitLog中。只要消息被刷盘持久化至磁盘文件CommitLog中，那么Producer发送的消息就不会丢失。正因为如此，Consumer也就肯定有机会去消费这条消息。当无法拉取到消息后，可以等下一次消息拉取，同时服务端也支持长轮询模式，如果一个消息拉取请求未拉取到消息，Broker允许等待30s的时间，只要这段时间内有新消息到达，将直接返回给消费端。这里，RocketMQ的具体做法是，使用Broker端的后台服务线程—ReputMessageService不停地分发请求并异步构建ConsumeQueue（逻辑消费队列）和IndexFile（索引文件）数据。
 
 
-
-
-
-
-
-
-
-### 2. 设计
-
-![](..\images\mq\rocketmq_design.png)
-
-**索引文件由索引文件头（IndexHeader）+（ 槽位 Slot ）+（消息的索引内容）三部分构成。**
 
 
 
