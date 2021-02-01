@@ -23,13 +23,10 @@
 ### **zookeeper概要：**
 
 ZooKeeper是用于分布式应用程序的协调服务。它公开了一组简单的API，分布式应用程序可以基于这些API用于同步，节点状态、配置等信息、服务注册等信息。其由JAVA编写，支持JAVA 和C两种语言的客户端。
-![图片](https://uploader.shimo.im/f/Q3T3PRV6bLkeFIMf.png!thumbnail)
 
-### **znode 节点**
+**znode 节点**
 
 zookeeper 中数据基本单元叫节点，节点之下可包含子节点，最后以树级方式程现。每个节点拥有唯一的路径path。客户端基于PATH上传节点数据，zookeeper 收到后会实时通知对该路径进行监听的客户端。
-
-![图片](https://uploader.shimo.im/f/vmq8ZNmrsWk7v199.png!thumbnail)
 
 ## 二、部署与常规配置
 
@@ -418,7 +415,7 @@ ZooKeeper 集群中的所有机器通过一个 **Leader 选举过程** 来选定
 
 **当在运行中Leader宕机或失去连接后，同样会触发选举机制，但是和启动时有所不同：**
 
-1. 每个节点状态跟新为 LOOKING ，会发送投票信息（myid，zxid）；
+1. 每个节点状态更新为 LOOKING ，会发送投票信息（myid，zxid）；
 2. 接受其他节点的的投票，判断有效性；
 3. 先对比 zxid ，若相同再对比 myid；
 4. 统计投票，有节点获取超过半数节点投票结束，该节点当选 Leader；

@@ -267,6 +267,37 @@ Apache RocketMQ在4.3.0版中已经支持分布式事务消息，这里RocketMQ�
 4. 事务消息将在 Broker 配置文件中的参数 transactionMsgTimeout 这样的特定时间之后被检查。当发送事务消息时，用户还可以通过设置用户属性 CHECK_IMMUNITY_TIME_I N_SECONDS 来改变这个限制，该参数优先于 transactionMsgTimeout 参数。
 5. 为了避免单个消息被检查太多次而导致半队列消息累积，默认单个消息的检查次数限制为 15 次，但是用户可以通过 Broker 配置文件的 transactionCheckMax参数来修改。如果已经检查某条消息超过 N 次的话（ N = transactionCheckMax ） 则 Broker 将丢弃此消息，并在默认情况下同时打印错误日志。用户可以通过重写 AbstractTransactionCheckListener 来修改这个行为。
 
+
+
+## 三 消息可靠性
+
+### 1. 生产者可靠性
+
+RocketMQ 生产者发送消息会回调`SendCallback`接口，同步发送会返回`SendRuslt`，根据返回信息或回调判断是否发送成功，同时提供了失败重试机制。
+
+
+
+### 2. Broker持久化
+
+RocketMQ 持久化提供了同步和异步两种方式，同时主从信息同步也分为同步和异步。
+
+
+
+### 3. 消费者
+
+与 RabbitMQ 类型，RocketMQ 中也需要手动确认消息。
+
+
+
+## 四 消息堆积
+
+1. 提高消息并行度，通过增加消费数量，或者增加消费者中消费线程数量；
+2. 批量消费消息；
+3. 跳过不重要的消息；对于消费者消费消息一直较慢，且对业务数据要求不高，可以丢弃不重要的消息；
+4. 优化消息消费过程。
+
+
+
 ## 参考
 
 https://github.com/apache/rocketmq/tree/master/docs/cn

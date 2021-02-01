@@ -89,6 +89,21 @@ public Queue topicQueue(){
 
 在 RabbitMQ 中，通过`durable=true`可以设置对立的持久化，通过`deliveryMode = PERSISTENT`可以设置消息的持久化。
 
+**RabbitMQ对于queue中的message的保存方式有两种方式：disc（磁盘）和ram（内存）。**
+
+### 2.1 消息持久化触发
+
+- 消息发送时设置了持久化`deliverMode=2`；
+- 当 RabbitMQ 内存紧张导致 RAM 即将用尽时，会将消息持久化到磁盘，释放 RAM。
+
+**触发消息刷新到磁盘**
+
+1. 写入文件前会有一个Buffer，大小为1M，数据在写入文件时，首先会写入到这个Buffer，如果Buffer已满，则会将Buffer写入到文件（未必刷到磁盘）；
+2. 有个固定的刷盘时间：25ms，也就是不管Buffer满不满，每隔25ms，Buffer里的数据及未刷新到磁盘的文件内容必定会刷到磁盘；
+3. 每次消息写入后，如果没有后续写入请求，则会直接将已写入的消息刷到磁盘：使用Erlang的receive x after 0来实现，只要进程的信箱里没有消息，则产生一个timeout消息，而timeout会触发刷盘操作。
+
+
+
 
 
 ### 3. 消费者ACK机制
