@@ -426,7 +426,7 @@ protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredTy
 
 `singletonObjects`：用于存储实例化的bean；
 
-`earlySingletonObjects`：存储早期的bean，在处理循环依赖后，bean会从；
+`earlySingletonObjects`：存储早期的bean，在处理循环依赖后，bean会从三级缓存放入这里；
 
 `singletonFactories`：存储工厂bean的引用，用于处理循环依赖。
 

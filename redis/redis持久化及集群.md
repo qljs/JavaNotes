@@ -399,7 +399,7 @@ gossip协议的优点在于元数据的更新比较分散，不是集中在一�
 当slave发现自己的master变为FAIL状态后，会尝试进行failover，期望成为新的master，多个slave竞争称为master的过程如下：
 
 1. slave发现自己的mater状态变为FAIL，将自己记录的集群currentEpoch（选举周期）加1，并广播FAILOVER_AUTH_REQUEST信息；
-2. 其他节点收到信息，判断消息合法性，主节点进行相应，发送FAILOVER_AUTH_ACK，每个选举周期只响应一次；
+2. 其他节点收到信息，判断消息合法性，主节点进行响应，发送FAILOVER_AUTH_ACK，每个选举周期只响应一次；
 3. 尝试failover的节点收集master响应的FAILOVER_AUTH_ACK，当收到超过半数的master响应的ack后，当选新的master；
 4. 发送广播消息通知其他节点。
 

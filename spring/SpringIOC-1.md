@@ -247,7 +247,7 @@ private <T> void doRegisterBean(Class<T> beanClass, @Nullable String name, @Null
     String beanName = (name != null ? name : this.beanNameGenerator.generateBeanName(abd, this.registry));
 	// 处理一些公共的注解，@Lazy、@Primary等
     AnnotationConfigUtils.processCommonDefinitionAnnotations(abd);
-    // 解析创建来的注解
+    // 解析穿进来的注解
     if (qualifiers != null) {
         for (Class<? extends Annotation> qualifier : qualifiers) {
             if (Primary.class == qualifier) {

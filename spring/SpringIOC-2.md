@@ -24,7 +24,7 @@ protected void initApplicationEventMulticaster() {
     else {
         // 新建一个多播器
         this.applicationEventMulticaster = new SimpleApplicationEventMulticaster(beanFactory);
-        // 把多播器注入到bean工程
+        // 把多播器注入到bean工厂
         beanFactory.registerSingleton(APPLICATION_EVENT_MULTICASTER_BEAN_NAME, this.applicationEventMulticaster);
         if (logger.isTraceEnabled()) {
             logger.trace("No '" + APPLICATION_EVENT_MULTICASTER_BEAN_NAME + "' bean, using " +

@@ -215,7 +215,7 @@ for(select id from table_b){
 	select * from table_a where a.id=b.id
 }
 
--- 当table_b数据集小于table_a数据集时，exsits优先in
+-- 当table_a数据集小于table_b数据集时，exsits优先in
 select * from table_a where exsits (select 1 from table_b)
 
 # 相当于，实际执行可能不是逐行对比
