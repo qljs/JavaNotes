@@ -155,8 +155,6 @@ private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoad
 
 ## 二 启动类的run()方法
 
-在启动类中，出了`@SpringBootApplication`注解之外，还有一个就是`run()`方法，接下来就看一下`run()`方法做了什么。
-
 ```java
 // SpringApplication.java
 public static ConfigurableApplicationContext run(Class<?> primarySource, String... args) {

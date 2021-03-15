@@ -984,3 +984,16 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 }
 ```
 
+
+
+
+
+## Netty零拷贝 
+
+Netty的接收和发送ByteBuffer采用DIRECT BUFFERS，使用**堆外直接内存**进行Socket读写，不需要进行字节缓冲区的二次拷贝。 如果使用传统的JVM堆内存（HEAP BUFFERS）进行Socket读写，JVM会将堆内存Buffer拷贝一份到直接内存中，然后才能写入Socket 中。JVM堆内存的数据是不能直接写入Socket中的。相比于堆外直接内存，消息在发送过程中多了一次缓冲区的内存拷贝。
+
+
+
+## 参考
+
+https://mp.weixin.qq.com/s/eJ-dAtOYsxylGL7pBv7VVA

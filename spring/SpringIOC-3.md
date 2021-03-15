@@ -443,6 +443,7 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
             // 早期bean缓存也没有
             if (singletonObject == null && allowEarlyReference) {
                 // 从工厂bean缓存中取，如果有的话放入早期bean缓存中
+                // 
                 ObjectFactory<?> singletonFactory = this.singletonFactories.get(beanName);
                 if (singletonFactory != null) {
                     singletonObject = singletonFactory.getObject();

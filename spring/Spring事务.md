@@ -41,10 +41,10 @@ public interface TransactionDefinition {
 	// 支持当前事务，没有则新建一个事务
 	int PROPAGATION_REQUIRED = 0;
 
-	// 如果当前有事务，加入当前事务；若没有，则以非事务的方式执行官
+	// 如果当前有事务，加入当前事务；若没有，则以非事务的方式执行
 	int PROPAGATION_SUPPORTS = 1;
 
-	// 如果挡墙有事务，加入当前事务；若没有则抛出异常
+	// 如果当前有事务，加入当前事务；若没有则抛出异常
 	int PROPAGATION_MANDATORY = 2;
 
 	// 创建一个新的事务，若当前有事务，则将当前事务挂起
